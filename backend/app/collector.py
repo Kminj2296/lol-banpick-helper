@@ -13,17 +13,33 @@ from .config import LANES
 from .db import get_conn, init_db, insert_matchup, is_match_processed, mark_match_processed
 
 
-def collect_summoner_ids(max_summoners: int) -> list[str]:
-    ids: list[str] = []
+def collect_puuids(max_summoners: int) -> list[str]:
+    """리그 엔트리에서 puuid를 모은다.
+
+    Riot이 league-v4 응답에 puuid를 직접 내려주는 지역/시점이 있고,
+    summonerId만 내려주고 puuid는 summoner-v4로 따로 조회해야 하는
+    지역/시점도 있어서 둘 다 처리한다.
+    """
+    puuids: list[str] = []
+
+    def collect_from(entries: list[dict]):
+        for entry in entries:
+            if len(puuids) >= max_summoners:
+                return
+            puuid = entry.get("puuid")
+            if not puuid:
+                summoner = riot_client.get_summoner_by_id(entry["summonerId"])
+                puuid = summoner["puuid"]
+            puuids.append(puuid)
 
     challenger = riot_client.get_challenger_league()
-    ids.extend(entry["summonerId"] for entry in challenger.get("entries", []))
+    collect_from(challenger.get("entries", []))
 
-    if len(ids) < max_summoners:
+    if len(puuids) < max_summoners:
         grandmaster = riot_client.get_grandmaster_league()
-        ids.extend(entry["summonerId"] for entry in grandmaster.get("entries", []))
+        collect_from(grandmaster.get("entries", []))
 
-    return ids[:max_summoners]
+    return puuids[:max_summoners]
 
 
 def process_match(conn, match_id: str):
@@ -70,16 +86,14 @@ def main():
 
     init_db()
 
-    summoner_ids = collect_summoner_ids(args.max_summoners)
-    print(f"수집 대상 소환사 수: {len(summoner_ids)}")
+    puuids = collect_puuids(args.max_summoners)
+    print(f"수집 대상 소환사 수: {len(puuids)}")
 
     match_ids: set[str] = set()
-    for i, summoner_id in enumerate(summoner_ids, 1):
-        summoner = riot_client.get_summoner_by_id(summoner_id)
-        puuid = summoner["puuid"]
+    for i, puuid in enumerate(puuids, 1):
         ids = riot_client.get_match_ids_by_puuid(puuid, count=args.matches_per_summoner)
         match_ids.update(ids)
-        print(f"[{i}/{len(summoner_ids)}] 소환사 매치 {len(ids)}개 수집, 누적 매치 {len(match_ids)}개")
+        print(f"[{i}/{len(puuids)}] 소환사 매치 {len(ids)}개 수집, 누적 매치 {len(match_ids)}개")
 
     print(f"총 매치 {len(match_ids)}개 처리 시작")
     with get_conn() as conn:
@@ -89,6 +103,7 @@ def main():
             except Exception as e:
                 print(f"매치 {match_id} 처리 실패: {e}")
             if i % 10 == 0:
+                conn.commit()
                 print(f"진행률: {i}/{len(match_ids)}")
 
     print("완료")
