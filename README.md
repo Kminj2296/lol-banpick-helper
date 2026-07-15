@@ -76,6 +76,41 @@ python -m app.load_pro_data --csv ~/Downloads/2025_LoL_esports_match_data.csv --
 솔로랭크 데이터와 프로 데이터는 `source` 컬럼(`soloq` / `pro:LCK`)으로 구분되어 같이 쌓입니다.
 `/api/draft/recommend` 호출 시 `sources` 값을 지정하면 특정 소스만 골라서 계산할 수 있습니다.
 
+## 2-2. 데이터 주기적으로 업데이트하기
+
+메타는 계속 바뀌니까 데이터도 주기적으로 갱신해야 합니다. `backend/update_data.sh`가
+`app.collector`를 돌려서 최신 솔로랭크 매치를 더 수집해줍니다 (이미 처리한 매치는
+건너뛰므로 여러 번 실행해도 안전).
+
+```bash
+cd backend
+./update_data.sh
+# 수집 규모를 바꾸고 싶으면:
+MAX_SUMMONERS=100 MATCHES_PER_SUMMONER=20 ./update_data.sh
+```
+
+실행 로그는 `backend/update.log`에 쌓입니다.
+
+**⚠️ 완전 자동화의 한계**: Riot Personal API Key는 24시간마다 만료되고, 재발급은
+developer.riotgames.com에 로그인해서 버튼을 눌러야 하는 수동 작업이라 스크립트로 자동화할
+수 없습니다. 즉 `update_data.sh`를 cron 등으로 주기 실행하게 걸어놔도, 키가 만료된 뒤로는
+계속 실패만 합니다. 방법은 두 가지입니다:
+
+1. **간단한 방법(권장)**: 그냥 생각날 때마다 (또는 하루 시작할 때) 키를 갱신하고
+   `./update_data.sh`를 수동 실행. 서버 배포 없이 로컬에서 바로 되는 방법입니다.
+2. **주기 실행 + 매일 키 갱신 병행**: 아래처럼 cron에 등록해두고, 매일 아침 `.env`의
+   `RIOT_API_KEY`만 새로 발급받아 갈아끼우면 나머지는 자동으로 돌아갑니다.
+
+   ```bash
+   crontab -e
+   # 매일 새벽 4시에 실행하는 예시 (경로는 본인 환경에 맞게 수정)
+   0 4 * * * /Users/kimminjae/Documents/League\ of\ Legends/lol-banpick-helper/backend/update_data.sh
+   ```
+
+   장기적으로 매번 수동 갱신이 귀찮다면, Riot Developer Portal에서 앱을 등록해
+   만료 없는 "Personal"/"Production" API 키를 신청하는 방법도 있습니다(승인 필요, 발급까지
+   시간이 걸릴 수 있음).
+
 ## 3. 프론트엔드 실행
 
 ```bash
