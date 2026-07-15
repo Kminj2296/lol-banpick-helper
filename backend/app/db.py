@@ -1,7 +1,9 @@
+import os
+import shutil
 import sqlite3
 from contextlib import contextmanager
 
-from .config import DB_PATH
+from .config import DB_PATH, DB_SEED_PATH
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS game_participants (
@@ -40,6 +42,8 @@ def get_conn():
 
 
 def init_db():
+    if not os.path.exists(DB_PATH) and os.path.exists(DB_SEED_PATH):
+        shutil.copyfile(DB_SEED_PATH, DB_PATH)
     with get_conn() as conn:
         conn.executescript(SCHEMA)
 

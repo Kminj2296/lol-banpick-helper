@@ -3,6 +3,7 @@ import os
 
 from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from . import scorer
 from .config import LANES
@@ -148,3 +149,8 @@ def draft_recommend(payload: dict = Body(...)):
         )
 
     return results[:20]
+
+
+_STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "static")
+if os.path.isdir(_STATIC_DIR):
+    app.mount("/", StaticFiles(directory=_STATIC_DIR, html=True), name="static")
