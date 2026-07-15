@@ -150,6 +150,20 @@ h1 {
   color: #ccc;
 }
 
+.ban-item.blue {
+  color: #60a5fa;
+}
+
+.ban-item.red {
+  color: #f87171;
+}
+
+.ban-team-tag {
+  color: #888;
+  font-size: 0.8rem;
+  margin-left: 0.15rem;
+}
+
 .pick-controls {
   display: flex;
   flex-wrap: wrap;

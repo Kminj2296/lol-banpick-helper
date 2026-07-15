@@ -60,8 +60,9 @@ function TeamPanel({ label, picks, className, displayName }) {
 function Draft() {
   const [mode, setMode] = useState('soloq')
   const [topChampions, setTopChampions] = useState([])
+  const [banLane, setBanLane] = useState('TOP')
   const [stepIndex, setStepIndex] = useState(0)
-  const [banned, setBanned] = useState([])
+  const [banned, setBanned] = useState([]) // { champion, team }
   const [blue, setBlue] = useState([])
   const [red, setRed] = useState([])
   const [selectedLane, setSelectedLane] = useState('TOP')
@@ -74,8 +75,8 @@ function Draft() {
   const draftSequence = MODES[mode].sequence
 
   useEffect(() => {
-    fetch('/api/top-champions?min_games=5').then((r) => r.json()).then(setTopChampions).catch(() => {})
-  }, [])
+    fetch(`/api/top-champions?min_games=5&lane=${banLane}`).then((r) => r.json()).then(setTopChampions).catch(() => {})
+  }, [banLane])
 
   const currentStep = stepIndex < draftSequence.length ? draftSequence[stepIndex] : null
   const currentTeamPicks = currentStep?.team === 'blue' ? blue : red
@@ -87,7 +88,7 @@ function Draft() {
   }, [currentTeamPicks])
 
   const excludedChampions = useMemo(
-    () => [...banned, ...blue.map((p) => p.champion), ...red.map((p) => p.champion)],
+    () => [...banned.map((b) => b.champion), ...blue.map((p) => p.champion), ...red.map((p) => p.champion)],
     [banned, blue, red],
   )
 
@@ -139,7 +140,7 @@ function Draft() {
 
   const confirmBan = (champion) => {
     if (!champion || !currentStep) return
-    setBanned((prev) => [...prev, champion])
+    setBanned((prev) => [...prev, { champion, team: currentStep.team }])
     setStepIndex((i) => i + 1)
     setInputValue('')
   }
@@ -218,7 +219,16 @@ function Draft() {
       </div>
 
       <div className="ban-list">
-        <strong>밴:</strong> {banned.length ? banned.map(displayName).join(', ') : '없음'}
+        <strong>밴:</strong>{' '}
+        {banned.length
+          ? banned.map((b, i) => (
+              <span key={i} className={`ban-item ${b.team}`}>
+                {displayName(b.champion)}
+                <span className="ban-team-tag">({TEAM_LABELS[b.team]})</span>
+                {i < banned.length - 1 ? ', ' : ''}
+              </span>
+            ))
+          : '없음'}
       </div>
 
       {currentStep?.type === 'pick' && (
@@ -251,16 +261,19 @@ function Draft() {
           <button type="button" onClick={() => handleManualConfirm(confirmBan)} disabled={!inputValue}>
             밴 확정
           </button>
-          {banSuggestions.length > 0 && (
-            <div className="ban-suggestions">
-              <span>전체 승률 상위 챔피언:</span>
-              {banSuggestions.map((c) => (
-                <button key={c.champion} type="button" className="chip-button" onClick={() => confirmBan(c.champion)}>
-                  {displayName(c.champion)} ({c.win_rate}%)
-                </button>
+          <div className="ban-suggestions">
+            <span>승률 상위 챔피언</span>
+            <select value={banLane} onChange={(e) => setBanLane(e.target.value)}>
+              {ALL_LANES.map((l) => (
+                <option key={l} value={l}>{LANE_LABELS[l]}</option>
               ))}
-            </div>
-          )}
+            </select>
+            {banSuggestions.map((c) => (
+              <button key={c.champion} type="button" className="chip-button" onClick={() => confirmBan(c.champion)}>
+                {displayName(c.champion)} ({c.win_rate}%)
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

@@ -98,12 +98,18 @@ def recommend(
 @app.get("/api/top-champions")
 def top_champions(
     min_games: int = Query(5, ge=1, description="최소 표본 게임 수"),
+    lane: str | None = Query(None, description="TOP / JUNGLE / MIDDLE / BOTTOM / UTILITY (생략 시 전체 라인 통합)"),
     sources: str | None = Query(None, description="쉼표로 구분된 source 목록 (예: soloq,pro:LCK)"),
 ):
-    """라인 구분 없는 전체 챔피언 승률 순위 (밴 후보 추천용)."""
+    """챔피언 승률 순위 (밴 후보 추천용). lane을 지정하면 해당 라인만 집계."""
+    if lane:
+        lane = lane.upper()
+        if lane not in LANES:
+            raise HTTPException(status_code=400, detail=f"lane은 {LANES} 중 하나여야 합니다")
+
     src_list = sources.split(",") if sources else None
     with get_conn() as conn:
-        base = scorer.base_winrates(conn, lane=None, sources=src_list)
+        base = scorer.base_winrates(conn, lane=lane, sources=src_list)
 
     rows = [
         {"champion": champ, "games": games, "win_rate": round(wins / games * 100, 1)}
