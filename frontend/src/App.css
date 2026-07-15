@@ -151,10 +151,34 @@ h1 {
   margin-right: 0.3rem;
 }
 
+.pick-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .pick-champ {
   display: flex;
   align-items: center;
   gap: 0.3rem;
+}
+
+.swap-button {
+  border: 1px solid #555;
+  background: transparent;
+  color: #888;
+  border-radius: 4px;
+  width: 22px;
+  height: 22px;
+  line-height: 1;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0;
+}
+
+.swap-button.active {
+  border-color: #facc15;
+  color: #facc15;
 }
 
 button.pick-champ {

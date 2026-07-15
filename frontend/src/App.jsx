@@ -26,7 +26,12 @@ function App() {
         </button>
       </div>
 
-      {tab === 'draft' ? <Draft /> : <CounterPick />}
+      <div style={{ display: tab === 'draft' ? 'block' : 'none' }}>
+        <Draft />
+      </div>
+      <div style={{ display: tab === 'counter' ? 'block' : 'none' }}>
+        <CounterPick />
+      </div>
     </div>
   )
 }

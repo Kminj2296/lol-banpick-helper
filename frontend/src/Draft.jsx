@@ -40,27 +40,39 @@ const MODES = {
 const TEAM_LABELS = { blue: '블루팀', red: '레드팀' }
 
 const CANCEL_TITLE = '클릭하면 이 선택과 이후에 한 선택이 모두 취소돼요'
+const SWAP_TITLE = '라인 스왑: 같은 팀에서 두 챔피언을 차례로 클릭하면 라인이 바뀌어요'
 
-function TeamPanel({ label, picks, className, displayName, imageUrl, onCancel }) {
+function TeamPanel({ label, picks, className, team, displayName, imageUrl, onCancel, swapSelection, onSwapClick }) {
   return (
     <div className={`team-panel ${className}`}>
       <h3>{label}</h3>
       <ul className="pick-list">
         {ALL_LANES.map((lane) => {
           const pick = picks.find((p) => p.lane === lane)
+          const isSwapSelected = swapSelection?.team === team && swapSelection?.actionIndex === pick?.actionIndex
           return (
             <li key={lane}>
               <span className="lane-tag">{LANE_LABELS[lane]}</span>
               {pick ? (
-                <button
-                  type="button"
-                  className="pick-champ cancelable"
-                  title={CANCEL_TITLE}
-                  onClick={() => onCancel(pick.actionIndex)}
-                >
-                  <ChampionThumb src={imageUrl(pick.champion)} alt={displayName(pick.champion)} size={28} />
-                  {displayName(pick.champion)}
-                </button>
+                <span className="pick-row">
+                  <button
+                    type="button"
+                    className="pick-champ cancelable"
+                    title={CANCEL_TITLE}
+                    onClick={() => onCancel(pick.actionIndex)}
+                  >
+                    <ChampionThumb src={imageUrl(pick.champion)} alt={displayName(pick.champion)} size={28} />
+                    {displayName(pick.champion)}
+                  </button>
+                  <button
+                    type="button"
+                    className={`swap-button ${isSwapSelected ? 'active' : ''}`}
+                    title={SWAP_TITLE}
+                    onClick={() => onSwapClick(team, pick.actionIndex)}
+                  >
+                    ⇄
+                  </button>
+                </span>
               ) : (
                 <span className="pick-champ">-</span>
               )}
@@ -77,6 +89,7 @@ function Draft() {
   const [topChampions, setTopChampions] = useState([])
   const [banLane, setBanLane] = useState('TOP')
   const [actions, setActions] = useState([]) // { type: 'ban'|'pick'|'skip', team, champion?, lane? }
+  const [swapSelection, setSwapSelection] = useState(null) // { team, actionIndex } | null
   const [selectedLane, setSelectedLane] = useState('TOP')
   const [inputValue, setInputValue] = useState('')
   const [recommendations, setRecommendations] = useState([])
@@ -179,12 +192,34 @@ function Draft() {
     setActions((prev) => prev.slice(0, actionIndex))
     setInputValue('')
     setError('')
+    setSwapSelection(null)
+  }
+
+  const handleSwapClick = (team, actionIndex) => {
+    if (!swapSelection || swapSelection.team !== team) {
+      setSwapSelection({ team, actionIndex })
+      return
+    }
+    if (swapSelection.actionIndex === actionIndex) {
+      setSwapSelection(null)
+      return
+    }
+    setActions((prev) => {
+      const next = [...prev]
+      const laneA = next[swapSelection.actionIndex].lane
+      const laneB = next[actionIndex].lane
+      next[swapSelection.actionIndex] = { ...next[swapSelection.actionIndex], lane: laneB }
+      next[actionIndex] = { ...next[actionIndex], lane: laneA }
+      return next
+    })
+    setSwapSelection(null)
   }
 
   const handleReset = () => {
     setActions([])
     setInputValue('')
     setRecommendations([])
+    setSwapSelection(null)
   }
 
   const handleModeChange = (newMode) => {
@@ -209,7 +244,8 @@ function Draft() {
       <p className="subtitle">
         밴픽 순서를 따라가면서, 픽 차례마다 라인을 고르면 지금까지의 아군/적군 조합을 고려한 추정 승률로
         추천 챔피언을 보여줘요. 챔피언은 한글/영문 둘 다 검색할 수 있어요. 위에 올라간 픽/밴을 다시 누르면
-        그 선택과 그 뒤에 한 선택이 모두 취소돼요.
+        그 선택과 그 뒤에 한 선택이 모두 취소돼요. 픽 옆의 ⇄ 버튼을 누르면 같은 팀 안에서 두 챔피언의
+        라인을 바꿀 수 있어요.
       </p>
 
       <div className="mode-select">
@@ -242,17 +278,23 @@ function Draft() {
           label={`블루팀${currentStep?.team === 'blue' ? ' (진행중)' : ''}`}
           picks={blue}
           className="blue"
+          team="blue"
           displayName={displayName}
           imageUrl={imageUrl}
           onCancel={cancelFrom}
+          swapSelection={swapSelection}
+          onSwapClick={handleSwapClick}
         />
         <TeamPanel
           label={`레드팀${currentStep?.team === 'red' ? ' (진행중)' : ''}`}
           picks={red}
           className="red"
+          team="red"
           displayName={displayName}
           imageUrl={imageUrl}
           onCancel={cancelFrom}
+          swapSelection={swapSelection}
+          onSwapClick={handleSwapClick}
         />
       </div>
 
