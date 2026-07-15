@@ -1,23 +1,27 @@
 import { useEffect, useState } from 'react'
 import { LANE_LABELS } from './laneLabels'
+import { useChampionNames } from './useChampionNames'
 
 function CounterPick() {
   const [lanes, setLanes] = useState([])
-  const [champions, setChampions] = useState([])
   const [lane, setLane] = useState('TOP')
-  const [enemyChampion, setEnemyChampion] = useState('')
+  const [enemyInput, setEnemyInput] = useState('')
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const { displayName, resolve, searchOptions } = useChampionNames()
 
   useEffect(() => {
     fetch('/api/lanes').then((r) => r.json()).then(setLanes).catch(() => {})
-    fetch('/api/champions').then((r) => r.json()).then(setChampions).catch(() => {})
   }, [])
 
   const handleSearch = async (e) => {
     e.preventDefault()
-    if (!enemyChampion) return
+    const enemyChampion = resolve(enemyInput)
+    if (!enemyChampion) {
+      setError('챔피언 이름을 목록에서 정확히 선택해주세요 (한글/영문 둘 다 가능).')
+      return
+    }
     setLoading(true)
     setError('')
     try {
@@ -48,13 +52,13 @@ function CounterPick() {
 
         <input
           list="champion-list"
-          placeholder="상대 챔피언 (예: Darius)"
-          value={enemyChampion}
-          onChange={(e) => setEnemyChampion(e.target.value)}
+          placeholder="상대 챔피언 (한글 또는 영문, 예: 다리우스)"
+          value={enemyInput}
+          onChange={(e) => setEnemyInput(e.target.value)}
         />
         <datalist id="champion-list">
-          {champions.map((c) => (
-            <option key={c} value={c} />
+          {searchOptions.map((c) => (
+            <option key={c.en} value={c.label} />
           ))}
         </datalist>
 
@@ -79,7 +83,7 @@ function CounterPick() {
             {results.map((r, i) => (
               <tr key={r.champion}>
                 <td>{i + 1}</td>
-                <td>{r.champion}</td>
+                <td>{displayName(r.champion)}</td>
                 <td>{r.win_rate}%</td>
                 <td>{r.games}</td>
               </tr>

@@ -36,6 +36,12 @@ h1 {
   font-weight: bold;
 }
 
+.mode-select {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
 .subtitle {
   color: #888;
   margin-bottom: 1.5rem;

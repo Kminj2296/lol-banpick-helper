@@ -1,3 +1,6 @@
+import json
+import os
+
 from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -6,6 +9,10 @@ from .config import LANES
 from .db import get_conn, init_db
 
 app = FastAPI(title="LoL Ban/Pick Helper API")
+
+_CHAMPION_NAMES_KO_PATH = os.path.join(os.path.dirname(__file__), "data", "champion_names_ko.json")
+with open(_CHAMPION_NAMES_KO_PATH, encoding="utf-8") as f:
+    CHAMPION_NAMES_KO: dict[str, str] = json.load(f)
 
 app.add_middleware(
     CORSMiddleware,
@@ -32,6 +39,12 @@ def get_champions():
             "SELECT DISTINCT champion FROM game_participants ORDER BY champion"
         ).fetchall()
     return [row["champion"] for row in rows]
+
+
+@app.get("/api/champion-names")
+def get_champion_names():
+    """챔피언 영문 ID -> 한국어 이름 매핑 (Riot Data Dragon 기준)."""
+    return CHAMPION_NAMES_KO
 
 
 @app.get("/api/sources")

@@ -1,7 +1,8 @@
 # 롤 밴픽 도우미
 
-정식 대회 밴픽 순서(밴6-픽6-밴4-픽4)를 따라가면서, 픽 차례마다 지금까지의 아군/적군 조합을
-고려해 승률이 높은 챔피언을 추천해주는 웹앱입니다. 라인 1대1 카운터 픽 검색 기능도 별도로 있습니다.
+밴픽 순서(솔로랭크 방식/대회 방식 선택 가능)를 따라가면서, 픽 차례마다 지금까지의 아군/적군
+조합을 고려해 승률이 높은 챔피언을 추천해주는 웹앱입니다. 챔피언은 한글/영문 아무거나 검색할 수
+있습니다. 라인 1대1 카운터 픽 검색 기능도 별도로 있습니다.
 
 lol.ps 같은 스크래핑 사이트 대신, **Riot 공식 API로 챌린저/그랜드마스터 랭크 게임 데이터를 직접 수집**해서
 경기당 10명 전원의 팀/라인/챔피언/승패를 자체 집계합니다. Oracle's Elixir CSV를 통해 LCK 등 프로 대회
@@ -85,10 +86,19 @@ npm run dev
 
 브라우저에서 `http://localhost:5173` 접속. `/api` 요청은 Vite 프록시를 통해 `localhost:8000` 백엔드로 전달됩니다.
 
+## 밴픽 순서
+
+프론트에서 두 가지 순서 중 골라서 진행할 수 있습니다:
+
+- **솔로랭크 순서**: 밴 10개(양팀 번갈아 5개씩) → 픽 10개(1-2-2-2-2-1 스네이크)
+- **대회 순서**: 밴 6개(B-R-B-R-B-R) → 픽 6개(B-R-R-B-B-R) → 밴 4개(R-B-R-B) → 픽 4개(R-B-B-R)
+
 ## API
 
 - `GET /api/lanes` — 라인 목록
-- `GET /api/champions` — 수집된 챔피언 목록
+- `GET /api/champions` — 수집된 챔피언 목록 (영문 ID)
+- `GET /api/champion-names` — 챔피언 영문 ID → 한국어 이름 매핑 (Riot Data Dragon 기준,
+  `backend/app/data/champion_names_ko.json`)
 - `GET /api/sources` — 적재된 데이터 소스 목록 (soloq, pro:LCK 등)과 경기 수
 - `GET /api/top-champions?min_games=5&sources=soloq` — 라인 구분 없는 전체 챔피언 승률 순위 (밴 추천용)
 - `GET /api/recommend?lane=TOP&enemy_champion=Darius&min_games=5` — 같은 라인 1대1 상대 기준 카운터 픽
