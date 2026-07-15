@@ -39,7 +39,9 @@ const MODES = {
 
 const TEAM_LABELS = { blue: '블루팀', red: '레드팀' }
 
-function TeamPanel({ label, picks, className, displayName, imageUrl }) {
+const CANCEL_TITLE = '클릭하면 이 선택과 이후에 한 선택이 모두 취소돼요'
+
+function TeamPanel({ label, picks, className, displayName, imageUrl, onCancel }) {
   return (
     <div className={`team-panel ${className}`}>
       <h3>{label}</h3>
@@ -49,10 +51,19 @@ function TeamPanel({ label, picks, className, displayName, imageUrl }) {
           return (
             <li key={lane}>
               <span className="lane-tag">{LANE_LABELS[lane]}</span>
-              <span className="pick-champ">
-                {pick && <ChampionThumb src={imageUrl(pick.champion)} alt={displayName(pick.champion)} size={28} />}
-                {pick ? displayName(pick.champion) : '-'}
-              </span>
+              {pick ? (
+                <button
+                  type="button"
+                  className="pick-champ cancelable"
+                  title={CANCEL_TITLE}
+                  onClick={() => onCancel(pick.actionIndex)}
+                >
+                  <ChampionThumb src={imageUrl(pick.champion)} alt={displayName(pick.champion)} size={28} />
+                  {displayName(pick.champion)}
+                </button>
+              ) : (
+                <span className="pick-champ">-</span>
+              )}
             </li>
           )
         })}
@@ -65,10 +76,7 @@ function Draft() {
   const [mode, setMode] = useState('soloq')
   const [topChampions, setTopChampions] = useState([])
   const [banLane, setBanLane] = useState('TOP')
-  const [stepIndex, setStepIndex] = useState(0)
-  const [banned, setBanned] = useState([]) // { champion, team }
-  const [blue, setBlue] = useState([])
-  const [red, setRed] = useState([])
+  const [actions, setActions] = useState([]) // { type: 'ban'|'pick'|'skip', team, champion?, lane? }
   const [selectedLane, setSelectedLane] = useState('TOP')
   const [inputValue, setInputValue] = useState('')
   const [recommendations, setRecommendations] = useState([])
@@ -77,10 +85,24 @@ function Draft() {
   const { displayName, resolve, searchOptions, imageUrl } = useChampionNames()
 
   const draftSequence = MODES[mode].sequence
+  const stepIndex = actions.length
 
   useEffect(() => {
     fetch(`/api/top-champions?min_games=5&lane=${banLane}`).then((r) => r.json()).then(setTopChampions).catch(() => {})
   }, [banLane])
+
+  const banned = useMemo(
+    () => actions.map((a, i) => ({ ...a, actionIndex: i })).filter((a) => a.type === 'ban'),
+    [actions],
+  )
+  const blue = useMemo(
+    () => actions.map((a, i) => ({ ...a, actionIndex: i })).filter((a) => a.type === 'pick' && a.team === 'blue'),
+    [actions],
+  )
+  const red = useMemo(
+    () => actions.map((a, i) => ({ ...a, actionIndex: i })).filter((a) => a.type === 'pick' && a.team === 'red'),
+    [actions],
+  )
 
   const currentStep = stepIndex < draftSequence.length ? draftSequence[stepIndex] : null
   const currentTeamPicks = currentStep?.team === 'blue' ? blue : red
@@ -135,32 +157,32 @@ function Draft() {
 
   const confirmPick = (champion) => {
     if (!champion || !currentStep) return
-    const entry = { champion, lane: selectedLane }
-    if (currentStep.team === 'blue') setBlue((prev) => [...prev, entry])
-    else setRed((prev) => [...prev, entry])
-    setStepIndex((i) => i + 1)
+    setActions((prev) => [...prev, { type: 'pick', team: currentStep.team, champion, lane: selectedLane }])
     setInputValue('')
   }
 
   const confirmBan = (champion) => {
     if (!champion || !currentStep) return
-    setBanned((prev) => [...prev, { champion, team: currentStep.team }])
-    setStepIndex((i) => i + 1)
+    setActions((prev) => [...prev, { type: 'ban', team: currentStep.team, champion }])
     setInputValue('')
   }
 
   const skipBan = () => {
     if (!currentStep) return
-    setStepIndex((i) => i + 1)
+    setActions((prev) => [...prev, { type: 'skip', team: currentStep.team }])
+    setInputValue('')
+    setError('')
+  }
+
+  // actionIndex 시점 이후의 선택을 전부 되돌린다 (해당 액션 포함)
+  const cancelFrom = (actionIndex) => {
+    setActions((prev) => prev.slice(0, actionIndex))
     setInputValue('')
     setError('')
   }
 
   const handleReset = () => {
-    setStepIndex(0)
-    setBanned([])
-    setBlue([])
-    setRed([])
+    setActions([])
     setInputValue('')
     setRecommendations([])
   }
@@ -186,7 +208,8 @@ function Draft() {
     <div className="container draft-container">
       <p className="subtitle">
         밴픽 순서를 따라가면서, 픽 차례마다 라인을 고르면 지금까지의 아군/적군 조합을 고려한 추정 승률로
-        추천 챔피언을 보여줘요. 챔피언은 한글/영문 둘 다 검색할 수 있어요.
+        추천 챔피언을 보여줘요. 챔피언은 한글/영문 둘 다 검색할 수 있어요. 위에 올라간 픽/밴을 다시 누르면
+        그 선택과 그 뒤에 한 선택이 모두 취소돼요.
       </p>
 
       <div className="mode-select">
@@ -221,6 +244,7 @@ function Draft() {
           className="blue"
           displayName={displayName}
           imageUrl={imageUrl}
+          onCancel={cancelFrom}
         />
         <TeamPanel
           label={`레드팀${currentStep?.team === 'red' ? ' (진행중)' : ''}`}
@@ -228,19 +252,25 @@ function Draft() {
           className="red"
           displayName={displayName}
           imageUrl={imageUrl}
+          onCancel={cancelFrom}
         />
       </div>
 
       <div className="ban-list">
         <strong>밴:</strong>{' '}
         {banned.length
-          ? banned.map((b, i) => (
-              <span key={i} className={`ban-item ${b.team}`}>
+          ? banned.map((b) => (
+              <button
+                key={b.actionIndex}
+                type="button"
+                className={`ban-item ${b.team}`}
+                title={CANCEL_TITLE}
+                onClick={() => cancelFrom(b.actionIndex)}
+              >
                 <ChampionThumb src={imageUrl(b.champion)} alt={displayName(b.champion)} size={20} />
                 {displayName(b.champion)}
                 <span className="ban-team-tag">({TEAM_LABELS[b.team]})</span>
-                {i < banned.length - 1 ? ', ' : ''}
-              </span>
+              </button>
             ))
           : '없음'}
       </div>
@@ -310,43 +340,50 @@ function Draft() {
             <p className="hint">표본이 부족하거나 조건에 맞는 추천이 없어요.</p>
           )}
           {!loadingRec && recommendations.length > 0 && (
-            <table className="result-table">
-              <thead>
-                <tr>
-                  <th>순위</th>
-                  <th>챔피언</th>
-                  <th>기본 승률</th>
-                  <th>추정 승률</th>
-                  <th>표본</th>
-                  <th>근거</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {recommendations.map((r, i) => (
-                  <tr key={r.champion}>
-                    <td>{i + 1}</td>
-                    <td className="champion-cell">
-                      <ChampionThumb src={imageUrl(r.champion)} alt={displayName(r.champion)} size={28} />
-                      {displayName(r.champion)}
-                    </td>
-                    <td>{r.base_win_rate}%</td>
-                    <td><strong>{r.estimated_win_rate}%</strong></td>
-                    <td>{r.base_games}</td>
-                    <td className="components-cell">
-                      {r.components.slice(0, 3).map((c, idx) => (
-                        <div key={idx} className={`component ${c.delta >= 0 ? 'positive' : 'negative'}`}>
-                          {c.type === 'synergy' ? `+${displayName(c.with)}` : `vs ${displayName(c.vs)}`}: {c.delta > 0 ? '+' : ''}{c.delta}%p
-                        </div>
-                      ))}
-                    </td>
-                    <td>
-                      <button type="button" onClick={() => confirmPick(r.champion)}>선택</button>
-                    </td>
+            <>
+              <p className="table-note">
+                <strong>기본 승률</strong>: 이 챔피언 단독 승률 (다른 픽/밴 고려 안 함) ·{' '}
+                <strong>추정 승률</strong>: 기본 승률에 지금까지 픽한 아군과의 시너지, 상대 챔피언과의 카운터
+                보정치를 더한 값 · <strong>추정 승률이 높은 순</strong>으로 정렬돼요.
+              </p>
+              <table className="result-table">
+                <thead>
+                  <tr>
+                    <th>순위</th>
+                    <th>챔피언</th>
+                    <th title="이 챔피언 단독 승률 (다른 픽/밴 고려 안 함)">기본 승률</th>
+                    <th title="기본 승률 + 아군 시너지 + 상대 카운터 보정치">추정 승률</th>
+                    <th>표본</th>
+                    <th>근거</th>
+                    <th></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {recommendations.map((r, i) => (
+                    <tr key={r.champion}>
+                      <td>{i + 1}</td>
+                      <td className="champion-cell">
+                        <ChampionThumb src={imageUrl(r.champion)} alt={displayName(r.champion)} size={28} />
+                        {displayName(r.champion)}
+                      </td>
+                      <td>{r.base_win_rate}%</td>
+                      <td><strong>{r.estimated_win_rate}%</strong></td>
+                      <td>{r.base_games}</td>
+                      <td className="components-cell">
+                        {r.components.slice(0, 3).map((c, idx) => (
+                          <div key={idx} className={`component ${c.delta >= 0 ? 'positive' : 'negative'}`}>
+                            {c.type === 'synergy' ? `+${displayName(c.with)}` : `vs ${displayName(c.vs)}`}: {c.delta > 0 ? '+' : ''}{c.delta}%p
+                          </div>
+                        ))}
+                      </td>
+                      <td>
+                        <button type="button" onClick={() => confirmPick(r.champion)}>선택</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
           )}
         </>
       )}

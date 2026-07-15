@@ -157,9 +157,32 @@ h1 {
   gap: 0.3rem;
 }
 
+button.pick-champ {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  padding: 0;
+  cursor: pointer;
+}
+
+button.pick-champ.cancelable:hover {
+  color: #f87171;
+  text-decoration: line-through;
+}
+
 .ban-item {
   display: inline-flex;
   align-items: center;
+  border: none;
+  background: transparent;
+  font-size: 0.9rem;
+  cursor: pointer;
+  margin-right: 0.2rem;
+}
+
+.ban-item:hover {
+  text-decoration: line-through;
 }
 
 .ban-list {
@@ -180,6 +203,12 @@ h1 {
   color: #888;
   font-size: 0.8rem;
   margin-left: 0.15rem;
+}
+
+.table-note {
+  font-size: 0.82rem;
+  color: #888;
+  margin: 0.5rem 0;
 }
 
 .pick-controls {
