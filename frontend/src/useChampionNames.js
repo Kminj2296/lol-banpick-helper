@@ -5,11 +5,15 @@ import { useEffect, useMemo, useState } from 'react'
 export function useChampionNames() {
   const [champions, setChampions] = useState([])
   const [namesKo, setNamesKo] = useState({})
+  const [images, setImages] = useState({})
 
   useEffect(() => {
     fetch('/api/champions').then((r) => r.json()).then(setChampions).catch(() => {})
     fetch('/api/champion-names').then((r) => r.json()).then(setNamesKo).catch(() => {})
+    fetch('/api/champion-images').then((r) => r.json()).then(setImages).catch(() => {})
   }, [])
+
+  const imageUrl = (enId) => images[enId] || null
 
   const koToEn = useMemo(() => {
     const map = {}
@@ -42,5 +46,5 @@ export function useChampionNames() {
     [champions, namesKo],
   )
 
-  return { champions, namesKo, koToEn, displayName, resolve, searchOptions }
+  return { champions, namesKo, koToEn, displayName, resolve, searchOptions, imageUrl }
 }

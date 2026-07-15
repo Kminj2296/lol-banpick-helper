@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import ChampionThumb from './ChampionThumb'
 import { ALL_LANES, LANE_LABELS } from './laneLabels'
 import { useChampionNames } from './useChampionNames'
 
@@ -38,7 +39,7 @@ const MODES = {
 
 const TEAM_LABELS = { blue: '블루팀', red: '레드팀' }
 
-function TeamPanel({ label, picks, className, displayName }) {
+function TeamPanel({ label, picks, className, displayName, imageUrl }) {
   return (
     <div className={`team-panel ${className}`}>
       <h3>{label}</h3>
@@ -48,7 +49,10 @@ function TeamPanel({ label, picks, className, displayName }) {
           return (
             <li key={lane}>
               <span className="lane-tag">{LANE_LABELS[lane]}</span>
-              <span className="pick-champ">{pick ? displayName(pick.champion) : '-'}</span>
+              <span className="pick-champ">
+                {pick && <ChampionThumb src={imageUrl(pick.champion)} alt={displayName(pick.champion)} size={28} />}
+                {pick ? displayName(pick.champion) : '-'}
+              </span>
             </li>
           )
         })}
@@ -70,7 +74,7 @@ function Draft() {
   const [recommendations, setRecommendations] = useState([])
   const [loadingRec, setLoadingRec] = useState(false)
   const [error, setError] = useState('')
-  const { displayName, resolve, searchOptions } = useChampionNames()
+  const { displayName, resolve, searchOptions, imageUrl } = useChampionNames()
 
   const draftSequence = MODES[mode].sequence
 
@@ -145,6 +149,13 @@ function Draft() {
     setInputValue('')
   }
 
+  const skipBan = () => {
+    if (!currentStep) return
+    setStepIndex((i) => i + 1)
+    setInputValue('')
+    setError('')
+  }
+
   const handleReset = () => {
     setStepIndex(0)
     setBanned([])
@@ -209,12 +220,14 @@ function Draft() {
           picks={blue}
           className="blue"
           displayName={displayName}
+          imageUrl={imageUrl}
         />
         <TeamPanel
           label={`레드팀${currentStep?.team === 'red' ? ' (진행중)' : ''}`}
           picks={red}
           className="red"
           displayName={displayName}
+          imageUrl={imageUrl}
         />
       </div>
 
@@ -223,6 +236,7 @@ function Draft() {
         {banned.length
           ? banned.map((b, i) => (
               <span key={i} className={`ban-item ${b.team}`}>
+                <ChampionThumb src={imageUrl(b.champion)} alt={displayName(b.champion)} size={20} />
                 {displayName(b.champion)}
                 <span className="ban-team-tag">({TEAM_LABELS[b.team]})</span>
                 {i < banned.length - 1 ? ', ' : ''}
@@ -261,6 +275,9 @@ function Draft() {
           <button type="button" onClick={() => handleManualConfirm(confirmBan)} disabled={!inputValue}>
             밴 확정
           </button>
+          <button type="button" onClick={skipBan} className="skip-button">
+            밴 없이 넘어가기
+          </button>
           <div className="ban-suggestions">
             <span>승률 상위 챔피언</span>
             <select value={banLane} onChange={(e) => setBanLane(e.target.value)}>
@@ -270,6 +287,7 @@ function Draft() {
             </select>
             {banSuggestions.map((c) => (
               <button key={c.champion} type="button" className="chip-button" onClick={() => confirmBan(c.champion)}>
+                <ChampionThumb src={imageUrl(c.champion)} alt={displayName(c.champion)} size={20} />
                 {displayName(c.champion)} ({c.win_rate}%)
               </button>
             ))}
@@ -308,7 +326,10 @@ function Draft() {
                 {recommendations.map((r, i) => (
                   <tr key={r.champion}>
                     <td>{i + 1}</td>
-                    <td>{displayName(r.champion)}</td>
+                    <td className="champion-cell">
+                      <ChampionThumb src={imageUrl(r.champion)} alt={displayName(r.champion)} size={28} />
+                      {displayName(r.champion)}
+                    </td>
                     <td>{r.base_win_rate}%</td>
                     <td><strong>{r.estimated_win_rate}%</strong></td>
                     <td>{r.base_games}</td>

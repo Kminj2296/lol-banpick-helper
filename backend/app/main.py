@@ -10,9 +10,11 @@ from .db import get_conn, init_db
 
 app = FastAPI(title="LoL Ban/Pick Helper API")
 
-_CHAMPION_NAMES_KO_PATH = os.path.join(os.path.dirname(__file__), "data", "champion_names_ko.json")
-with open(_CHAMPION_NAMES_KO_PATH, encoding="utf-8") as f:
+_DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+with open(os.path.join(_DATA_DIR, "champion_names_ko.json"), encoding="utf-8") as f:
     CHAMPION_NAMES_KO: dict[str, str] = json.load(f)
+with open(os.path.join(_DATA_DIR, "champion_images.json"), encoding="utf-8") as f:
+    CHAMPION_IMAGES: dict[str, str] = json.load(f)
 
 app.add_middleware(
     CORSMiddleware,
@@ -45,6 +47,12 @@ def get_champions():
 def get_champion_names():
     """챔피언 영문 ID -> 한국어 이름 매핑 (Riot Data Dragon 기준)."""
     return CHAMPION_NAMES_KO
+
+
+@app.get("/api/champion-images")
+def get_champion_images():
+    """챔피언 영문 ID -> 썸네일 이미지 URL 매핑 (Riot Data Dragon CDN)."""
+    return CHAMPION_IMAGES
 
 
 @app.get("/api/sources")

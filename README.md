@@ -99,6 +99,8 @@ npm run dev
 - `GET /api/champions` — 수집된 챔피언 목록 (영문 ID)
 - `GET /api/champion-names` — 챔피언 영문 ID → 한국어 이름 매핑 (Riot Data Dragon 기준,
   `backend/app/data/champion_names_ko.json`)
+- `GET /api/champion-images` — 챔피언 영문 ID → 썸네일 이미지 URL 매핑 (Riot Data Dragon CDN,
+  `backend/app/data/champion_images.json`)
 - `GET /api/sources` — 적재된 데이터 소스 목록 (soloq, pro:LCK 등)과 경기 수
 - `GET /api/top-champions?min_games=5&sources=soloq` — 라인 구분 없는 전체 챔피언 승률 순위 (밴 추천용)
 - `GET /api/recommend?lane=TOP&enemy_champion=Darius&min_games=5` — 같은 라인 1대1 상대 기준 카운터 픽

@@ -144,6 +144,24 @@ h1 {
   color: #888;
 }
 
+.champion-thumb {
+  border-radius: 4px;
+  vertical-align: middle;
+  object-fit: cover;
+  margin-right: 0.3rem;
+}
+
+.pick-champ {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.ban-item {
+  display: inline-flex;
+  align-items: center;
+}
+
 .ban-list {
   margin-bottom: 1rem;
   font-size: 0.9rem;
@@ -183,6 +201,19 @@ h1 {
   cursor: pointer;
 }
 
+.skip-button {
+  color: #888;
+  border: 1px dashed #555;
+  background: transparent;
+  border-radius: 6px;
+}
+
+.champion-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .ban-suggestions {
   display: flex;
   flex-wrap: wrap;
@@ -194,6 +225,8 @@ h1 {
 }
 
 .chip-button {
+  display: inline-flex;
+  align-items: center;
   border: 1px solid #555;
   background: transparent;
   border-radius: 999px;
