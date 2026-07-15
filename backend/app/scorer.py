@@ -75,6 +75,42 @@ def counter_pairs(conn, vs_champion: str, sources: list[str] | None = None) -> d
     return {row["champion"]: (row["games"], row["wins"]) for row in rows}
 
 
+def lane_shares(conn, sources: list[str] | None = None) -> dict[str, dict]:
+    """
+    챔피언별로 전체 게임(모든 라인 통틀어) 대비 각 라인에서 픽된 비율.
+    {champion: {"total": 전체게임수, "shares": {lane: 비율}}}
+
+    표본이 적으면 우연히 특정 라인에서만 목격된 챔피언(예: 서포터가 탑 3게임
+    autofill로 이겼을 뿐인 경우)도 그 라인 후보로 섞여 들어오는데, 이걸
+    "실제로 이 라인에서 자주 픽되는가"로 걸러내기 위한 보조 지표다.
+    """
+    src_sql, src_params = _source_filter_sql(sources)
+    rows = conn.execute(
+        f"""
+        SELECT champion, lane, COUNT(*) AS games
+        FROM game_participants gp
+        WHERE 1=1{src_sql}
+        GROUP BY champion, lane
+        """,
+        src_params,
+    ).fetchall()
+
+    totals: dict[str, int] = {}
+    per_lane: dict[str, dict[str, int]] = {}
+    for row in rows:
+        champ, lane, games = row["champion"], row["lane"], row["games"]
+        totals[champ] = totals.get(champ, 0) + games
+        per_lane.setdefault(champ, {})[lane] = games
+
+    return {
+        champ: {
+            "total": totals[champ],
+            "shares": {lane: games / totals[champ] for lane, games in lanes.items()},
+        }
+        for champ, lanes in per_lane.items()
+    }
+
+
 def recommend_pick(
     conn,
     lane: str,
@@ -85,11 +121,18 @@ def recommend_pick(
     min_pair_games: int = 2,
     sources: list[str] | None = None,
     shrinkage_k: int = 10,
+    lane_fit_weight: float = 12.0,
+    lane_fit_confidence_games: int = 8,
 ) -> list[dict]:
     """
     shrinkage_k: 표본이 적은 시너지/카운터 보정치를 얼마나 축소할지 결정하는 값.
     games/(games+shrinkage_k)를 가중치로 곱해서, 표본이 적을수록(예: 2게임 100%
     승률) 보정치가 그대로 반영되지 않고 0에 가깝게 줄어들도록 한다.
+
+    lane_fit_weight: 이 챔피언이 요청한 라인에서 픽되는 비율(lane_shares)에
+    곱해서 더하는 최대 가산점(%p). 예를 들어 어떤 챔피언이 전체 게임의 100%를
+    이 라인에서 뛰었으면 +lane_fit_weight%p, 10%만 이 라인이었으면 소폭만 더한다.
+    lane_fit_confidence_games보다 총 표본이 적으면 그 비율만큼 가산점을 축소한다.
     """
     base = base_winrates(conn, lane=lane, sources=sources)
     excluded = set(allies) | set(enemies) | set(banned)
@@ -97,6 +140,7 @@ def recommend_pick(
 
     synergy_maps = [(ally, synergy_pairs(conn, ally, sources)) for ally in allies]
     counter_maps = [(enemy, counter_pairs(conn, enemy, sources)) for enemy in enemies]
+    lane_share_data = lane_shares(conn, sources)
 
     results = []
     for champ, (b_games, b_wins) in candidates.items():
@@ -129,6 +173,20 @@ def recommend_pick(
                     "win_rate": round(c_wr * 100, 1),
                     "delta": round((c_wr - b_wr) * 100, 1),
                     "applied_delta": (c_wr - b_wr) * weight,
+                })
+
+        info = lane_share_data.get(champ)
+        if info:
+            share = info["shares"].get(lane, 0.0)
+            confidence = min(1.0, info["total"] / lane_fit_confidence_games)
+            lane_fit_pp = share * lane_fit_weight * confidence
+            if lane_fit_pp >= 0.1:
+                components.append({
+                    "type": "lane_fit",
+                    "lane_share": round(share * 100, 1),
+                    "games": info["total"],
+                    "delta": round(lane_fit_pp, 1),
+                    "applied_delta": lane_fit_pp / 100,
                 })
 
         total_delta = sum(comp.pop("applied_delta") for comp in components)

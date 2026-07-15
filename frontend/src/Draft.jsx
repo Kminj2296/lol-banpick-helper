@@ -343,8 +343,9 @@ function Draft() {
             <>
               <p className="table-note">
                 <strong>기본 승률</strong>: 이 챔피언 단독 승률 (다른 픽/밴 고려 안 함) ·{' '}
-                <strong>추정 승률</strong>: 기본 승률에 지금까지 픽한 아군과의 시너지, 상대 챔피언과의 카운터
-                보정치를 더한 값 · <strong>추정 승률이 높은 순</strong>으로 정렬돼요.
+                <strong>추정 승률</strong>: 기본 승률에 지금까지 픽한 아군과의 시너지, 상대 챔피언과의 카운터,
+                이 라인에서 실제로 얼마나 자주 픽되는지(라인 적합도) 보정치를 더한 값 ·{' '}
+                <strong>추정 승률이 높은 순</strong>으로 정렬돼요.
               </p>
               <table className="result-table">
                 <thead>
@@ -372,7 +373,10 @@ function Draft() {
                       <td className="components-cell">
                         {r.components.slice(0, 3).map((c, idx) => (
                           <div key={idx} className={`component ${c.delta >= 0 ? 'positive' : 'negative'}`}>
-                            {c.type === 'synergy' ? `+${displayName(c.with)}` : `vs ${displayName(c.vs)}`}: {c.delta > 0 ? '+' : ''}{c.delta}%p
+                            {c.type === 'synergy' && `+${displayName(c.with)}`}
+                            {c.type === 'counter' && `vs ${displayName(c.vs)}`}
+                            {c.type === 'lane_fit' && `라인 적합도 (${c.lane_share}%)`}
+                            : {c.delta > 0 ? '+' : ''}{c.delta}%p
                           </div>
                         ))}
                       </td>
