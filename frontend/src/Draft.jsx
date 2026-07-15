@@ -1,18 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ALL_LANES, LANE_LABELS } from './laneLabels'
 
-// 정식 프로 대회 밴픽 순서: 밴6(B-R-B-R-B-R) → 픽6(B-R-R-B-B-R) → 밴4(R-B-R-B) → 픽4(R-B-B-R)
+// 솔로랭크 밴픽 순서: 밴10(B-R 번갈아 5개씩) → 픽10(1-2-2-2-2-1, B부터 스네이크)
 const DRAFT_SEQUENCE = [
   { type: 'ban', team: 'blue' }, { type: 'ban', team: 'red' },
   { type: 'ban', team: 'blue' }, { type: 'ban', team: 'red' },
   { type: 'ban', team: 'blue' }, { type: 'ban', team: 'red' },
-  { type: 'pick', team: 'blue' }, { type: 'pick', team: 'red' },
-  { type: 'pick', team: 'red' }, { type: 'pick', team: 'blue' },
-  { type: 'pick', team: 'blue' }, { type: 'pick', team: 'red' },
-  { type: 'ban', team: 'red' }, { type: 'ban', team: 'blue' },
-  { type: 'ban', team: 'red' }, { type: 'ban', team: 'blue' },
-  { type: 'pick', team: 'red' }, { type: 'pick', team: 'blue' },
-  { type: 'pick', team: 'blue' }, { type: 'pick', team: 'red' },
+  { type: 'ban', team: 'blue' }, { type: 'ban', team: 'red' },
+  { type: 'ban', team: 'blue' }, { type: 'ban', team: 'red' },
+  { type: 'pick', team: 'blue' },
+  { type: 'pick', team: 'red' }, { type: 'pick', team: 'red' },
+  { type: 'pick', team: 'blue' }, { type: 'pick', team: 'blue' },
+  { type: 'pick', team: 'red' }, { type: 'pick', team: 'red' },
+  { type: 'pick', team: 'blue' }, { type: 'pick', team: 'blue' },
+  { type: 'pick', team: 'red' },
 ]
 
 const TEAM_LABELS = { blue: '블루팀', red: '레드팀' }
@@ -135,7 +136,7 @@ function Draft() {
   return (
     <div className="container draft-container">
       <p className="subtitle">
-        정식 대회 밴픽 순서(밴6-픽6-밴4-픽4)를 따라가면서, 픽 차례마다 라인을 고르면 지금까지의 아군/적군 조합을
+        솔로랭크 밴픽 순서(밴10-픽1-2-2-2-2-1)를 따라가면서, 픽 차례마다 라인을 고르면 지금까지의 아군/적군 조합을
         고려한 추정 승률로 추천 챔피언을 보여줘요.
       </p>
 
