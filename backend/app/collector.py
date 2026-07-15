@@ -1,6 +1,7 @@
 """
 챌린저/그랜드마스터 랭크 게임의 매치 데이터를 수집해서
-'라인별 챔피언 vs 상대 챔피언' 승패 기록을 SQLite에 쌓는 스크립트.
+경기당 10명 전원의 팀/라인/챔피언/승패를 SQLite에 쌓는 스크립트.
+(같은 팀 챔피언 시너지, 상대 챔피언 카운터 계산에 필요)
 
 사용법 (backend 디렉토리에서):
     python -m app.collector --max-summoners 30 --matches-per-summoner 10
@@ -10,7 +11,9 @@ import argparse
 
 from . import riot_client
 from .config import LANES
-from .db import get_conn, init_db, insert_matchup, is_match_processed, mark_match_processed
+from .db import get_conn, init_db, insert_participant, is_match_processed, mark_match_processed
+
+SOURCE = "soloq"
 
 
 def collect_puuids(max_summoners: int) -> list[str]:
@@ -49,30 +52,17 @@ def process_match(conn, match_id: str):
     detail = riot_client.get_match_detail(match_id)
     participants = detail.get("info", {}).get("participants", [])
 
-    by_lane_team: dict[tuple[str, int], dict] = {}
     for p in participants:
         lane = p.get("teamPosition")
         if lane not in LANES:
             continue
-        by_lane_team[(lane, p["teamId"])] = p
 
-    for lane in LANES:
-        team_100 = by_lane_team.get((lane, 100))
-        team_200 = by_lane_team.get((lane, 200))
-        if not team_100 or not team_200:
-            continue
-
-        insert_matchup(
-            conn, match_id, lane,
-            champion=team_100["championName"],
-            enemy_champion=team_200["championName"],
-            win=team_100["win"],
-        )
-        insert_matchup(
-            conn, match_id, lane,
-            champion=team_200["championName"],
-            enemy_champion=team_100["championName"],
-            win=team_200["win"],
+        team_key = f"{match_id}_{p['teamId']}"
+        insert_participant(
+            conn, match_id, SOURCE, team_key,
+            lane=lane,
+            champion=p["championName"],
+            win=p["win"],
         )
 
     mark_match_processed(conn, match_id)

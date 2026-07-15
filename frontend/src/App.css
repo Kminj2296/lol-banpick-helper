@@ -1,13 +1,39 @@
-.container {
-  max-width: 640px;
+.app-shell {
+  max-width: 900px;
   margin: 0 auto;
   padding: 2rem 1rem;
+  font-family: system-ui, sans-serif;
+}
+
+.container {
+  max-width: 900px;
+  margin: 0 auto;
   font-family: system-ui, sans-serif;
 }
 
 h1 {
   font-size: 1.8rem;
   margin-bottom: 0.25rem;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.tab {
+  padding: 0.5rem 1rem;
+  font-size: 1rem;
+  cursor: pointer;
+  border: 1px solid #555;
+  background: transparent;
+  border-radius: 6px;
+}
+
+.tab.active {
+  background: #333;
+  font-weight: bold;
 }
 
 .subtitle {
@@ -55,4 +81,115 @@ h1 {
 
 .hint {
   color: #888;
+}
+
+.draft-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.reset-button {
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+}
+
+.draft-board {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.team-panel {
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+}
+
+.team-panel.blue {
+  border-color: #3b82f6;
+}
+
+.team-panel.red {
+  border-color: #ef4444;
+}
+
+.team-panel h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.pick-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pick-list li {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.2rem 0;
+  font-size: 0.9rem;
+}
+
+.lane-tag {
+  color: #888;
+}
+
+.ban-list {
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  color: #ccc;
+}
+
+.pick-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.pick-controls select,
+.pick-controls input {
+  padding: 0.5rem;
+  font-size: 1rem;
+}
+
+.pick-controls button {
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+}
+
+.ban-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  width: 100%;
+  font-size: 0.85rem;
+  color: #888;
+}
+
+.chip-button {
+  border: 1px solid #555;
+  background: transparent;
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.components-cell {
+  font-size: 0.8rem;
+}
+
+.component.positive {
+  color: #4ade80;
+}
+
+.component.negative {
+  color: #f87171;
 }
