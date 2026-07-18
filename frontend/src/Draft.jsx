@@ -452,6 +452,7 @@ function Draft() {
                 이 라인에서 실제로 얼마나 자주 픽되는지(라인 적합도) 보정치를 더한 값 ·{' '}
                 <strong>추정 승률이 높은 순</strong>으로 정렬돼요.
               </p>
+              <div className="table-scroll">
               <table className="result-table">
                 <thead>
                   <tr>
@@ -492,6 +493,7 @@ function Draft() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </>
           )}
         </>

@@ -69,9 +69,16 @@ h1 {
   cursor: pointer;
 }
 
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
 .result-table {
   width: 100%;
+  min-width: 40rem;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 
 .result-table th,
@@ -79,6 +86,39 @@ h1 {
   padding: 0.5rem;
   border-bottom: 1px solid #333;
   text-align: left;
+  vertical-align: middle;
+  overflow-wrap: break-word;
+}
+
+.result-table th:nth-child(1),
+.result-table td:nth-child(1) {
+  width: 3rem;
+  text-align: center;
+}
+
+.result-table th:nth-child(2),
+.result-table td:nth-child(2) {
+  width: 11rem;
+}
+
+.result-table th:nth-child(3),
+.result-table td:nth-child(3),
+.result-table th:nth-child(4),
+.result-table td:nth-child(4) {
+  width: 6rem;
+  text-align: right;
+}
+
+.result-table th:nth-child(5),
+.result-table td:nth-child(5) {
+  width: 4rem;
+  text-align: right;
+}
+
+.result-table th:nth-child(7),
+.result-table td:nth-child(7) {
+  width: 4.5rem;
+  text-align: center;
 }
 
 .error {
