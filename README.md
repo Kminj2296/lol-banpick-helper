@@ -145,6 +145,16 @@ npm run dev
 `bridge/lcu_bridge.py`를 게임을 켤 PC에서 실행하세요. 롤 클라이언트가 로컬에 열어두는
 비공식 관리 API(LCU)를 읽어서 배포된 백엔드로 상태를 전송합니다.
 
+**PC방 등 Python 설치가 안 되는 환경**: 아래 링크에서 Windows용 실행 파일(exe)을
+바로 받아서 더블클릭만 하면 됩니다 (설치 불필요).
+
+👉 [lcu_bridge.exe 다운로드](https://github.com/Kminj2296/lol-banpick-helper/releases/download/bridge-latest/lcu_bridge.exe)
+
+`bridge/` 코드가 바뀔 때마다 GitHub Actions가 이 exe를 자동으로 새로 빌드해서
+같은 링크에 올려두므로, 항상 이 링크 하나만 기억하면 됩니다.
+
+**Python이 있는 환경(직접 실행)**:
+
 ```bash
 cd bridge
 pip install -r requirements.txt

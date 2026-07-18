@@ -8,6 +8,9 @@ on:
       - ".github/workflows/build-bridge.yml"
   workflow_dispatch: {}
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -32,3 +35,14 @@ jobs:
         with:
           name: lcu_bridge-windows
           path: bridge/dist/lcu_bridge.exe
+
+      - name: Publish to bridge-latest release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          gh release upload bridge-latest bridge/dist/lcu_bridge.exe --clobber --repo "$GITHUB_REPOSITORY" \
+            || gh release create bridge-latest bridge/dist/lcu_bridge.exe \
+                 --title "PC방 실시간 연동 브리지 (Windows)" \
+                 --notes "롤 클라이언트에서 밴/픽을 읽어 웹 밴픽 도우미로 실시간 전송하는 프로그램입니다. 다운로드 후 더블클릭 실행하세요 (설치 불필요)." \
+                 --repo "$GITHUB_REPOSITORY"
