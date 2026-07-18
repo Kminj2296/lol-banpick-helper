@@ -95,6 +95,8 @@ function Draft() {
   const [recommendations, setRecommendations] = useState([])
   const [loadingRec, setLoadingRec] = useState(false)
   const [error, setError] = useState('')
+  const [liveEnabled, setLiveEnabled] = useState(false)
+  const [liveConnected, setLiveConnected] = useState(false)
   const { displayName, resolve, searchOptions, imageUrl } = useChampionNames()
 
   const draftSequence = MODES[mode].sequence
@@ -103,6 +105,26 @@ function Draft() {
   useEffect(() => {
     fetch(`/api/top-champions?min_games=5&lane=${banLane}`).then((r) => r.json()).then(setTopChampions).catch(() => {})
   }, [banLane])
+
+  useEffect(() => {
+    if (!liveEnabled) {
+      setLiveConnected(false)
+      return
+    }
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+    const ws = new WebSocket(`${wsProtocol}://${window.location.host}/ws/live`)
+    ws.onopen = () => setLiveConnected(true)
+    ws.onclose = () => setLiveConnected(false)
+    ws.onerror = () => setLiveConnected(false)
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data)
+      if (Array.isArray(data.actions)) {
+        setActions(data.actions)
+        setSwapSelection(null)
+      }
+    }
+    return () => ws.close()
+  }, [liveEnabled])
 
   const banned = useMemo(
     () => actions.map((a, i) => ({ ...a, actionIndex: i })).filter((a) => a.type === 'ban'),
@@ -273,6 +295,25 @@ function Draft() {
         <button type="button" onClick={handleReset} className="reset-button">처음부터</button>
       </div>
 
+      <div className="live-toggle">
+        <label>
+          <input
+            type="checkbox"
+            checked={liveEnabled}
+            onChange={(e) => {
+              setLiveEnabled(e.target.checked)
+              if (e.target.checked) handleReset()
+            }}
+          />
+          {' '}실시간 연동 (PC에서 로컬 브리지 실행 중이어야 해요)
+        </label>
+        {liveEnabled && (
+          <span className={`live-status ${liveConnected ? 'on' : 'off'}`}>
+            {liveConnected ? '연결됨 · 게임 클라이언트 대기 중' : '연결 중...'}
+          </span>
+        )}
+      </div>
+
       <div className="draft-board">
         <TeamPanel
           label={`블루팀${currentStep?.team === 'blue' ? ' (진행중)' : ''}`}
@@ -324,19 +365,23 @@ function Draft() {
               <option key={l} value={l}>{LANE_LABELS[l]}</option>
             ))}
           </select>
-          <input
-            list="all-champion-list"
-            placeholder="직접 입력해서 픽 (한글/영문)"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-          />
-          <button type="button" onClick={() => handleManualConfirm(confirmPick)} disabled={!inputValue}>
-            이 챔피언으로 확정
-          </button>
+          {!liveEnabled && (
+            <>
+              <input
+                list="all-champion-list"
+                placeholder="직접 입력해서 픽 (한글/영문)"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+              />
+              <button type="button" onClick={() => handleManualConfirm(confirmPick)} disabled={!inputValue}>
+                이 챔피언으로 확정
+              </button>
+            </>
+          )}
         </div>
       )}
 
-      {currentStep?.type === 'ban' && (
+      {currentStep?.type === 'ban' && !liveEnabled && (
         <div className="pick-controls">
           <input
             list="all-champion-list"

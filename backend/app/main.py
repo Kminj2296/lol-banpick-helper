@@ -1,13 +1,14 @@
 import json
 import os
 
-from fastapi import Body, FastAPI, HTTPException, Query
+from fastapi import Body, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import scorer
 from .config import LANES
 from .db import get_conn, init_db
+from .live import hub
 
 app = FastAPI(title="LoL Ban/Pick Helper API")
 
@@ -149,6 +150,24 @@ def draft_recommend(payload: dict = Body(...)):
         )
 
     return results[:20]
+
+
+@app.websocket("/ws/live")
+async def ws_live(websocket: WebSocket):
+    """PC방 로컬 브리지가 보내는 실시간 밴픽 상태를 받아보는 프론트엔드용 소켓."""
+    await hub.connect(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        hub.disconnect(websocket)
+
+
+@app.post("/api/live/push")
+async def live_push(payload: dict = Body(...)):
+    """PC방 로컬 브리지(lcu_bridge.py)가 롤 클라이언트에서 읽은 밴픽 상태를 보내는 엔드포인트."""
+    await hub.push(payload)
+    return {"ok": True}
 
 
 _STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "static")

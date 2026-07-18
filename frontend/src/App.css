@@ -101,6 +101,30 @@ h1 {
   cursor: pointer;
 }
 
+.live-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.live-status {
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.live-status.on {
+  background: #1f7a3f;
+  color: #fff;
+}
+
+.live-status.off {
+  background: #b0862c;
+  color: #fff;
+}
+
 .draft-board {
   display: grid;
   grid-template-columns: 1fr 1fr;
