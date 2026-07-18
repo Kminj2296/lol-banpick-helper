@@ -84,6 +84,7 @@ def load_csv(path: str, league_filter: str | None, source_label: str):
                     lane=POSITION_MAP[position],
                     champion=normalize_champion(champion),
                     win=bool(int(result)),
+                    patch=row.get("patch") or None,
                 )
                 inserted_games.add(game_id)
 

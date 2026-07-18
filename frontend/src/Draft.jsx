@@ -97,14 +97,24 @@ function Draft() {
   const [error, setError] = useState('')
   const [liveEnabled, setLiveEnabled] = useState(false)
   const [liveConnected, setLiveConnected] = useState(false)
+  const [patches, setPatches] = useState([])
+  const [selectedPatch, setSelectedPatch] = useState('')
   const { displayName, resolve, searchOptions, imageUrl } = useChampionNames()
 
   const draftSequence = MODES[mode].sequence
   const stepIndex = actions.length
 
   useEffect(() => {
-    fetch(`/api/top-champions?min_games=5&lane=${banLane}`).then((r) => r.json()).then(setTopChampions).catch(() => {})
-  }, [banLane])
+    fetch('/api/patches').then((r) => r.json()).then(setPatches).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    const patchQuery = selectedPatch ? `&patches=${selectedPatch}` : ''
+    fetch(`/api/top-champions?min_games=5&lane=${banLane}${patchQuery}`)
+      .then((r) => r.json())
+      .then(setTopChampions)
+      .catch(() => {})
+  }, [banLane, selectedPatch])
 
   useEffect(() => {
     if (!liveEnabled) {
@@ -190,6 +200,7 @@ function Draft() {
         enemies: enemyTeamPicks.map((p) => p.champion),
         banned: excludedChampions,
         min_games: 3,
+        patches: selectedPatch ? [selectedPatch] : null,
       }),
     })
       .then((r) => {
@@ -203,7 +214,7 @@ function Draft() {
       })
       .finally(() => setLoadingRec(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStep, selectedLane, excludedChampions])
+  }, [currentStep, selectedLane, excludedChampions, selectedPatch])
 
   const confirmPick = (champion) => {
     if (!champion || !currentStep) return
@@ -297,6 +308,18 @@ function Draft() {
           </button>
         ))}
       </div>
+
+      {patches.length > 0 && (
+        <div className="patch-select">
+          <label htmlFor="patch-filter">패치 필터</label>
+          <select id="patch-filter" value={selectedPatch} onChange={(e) => setSelectedPatch(e.target.value)}>
+            <option value="">전체 패치 사용</option>
+            {patches.map((p) => (
+              <option key={p.patch} value={p.patch}>{p.patch} ({p.games}경기)</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div className="draft-status">
         {currentStep ? (
@@ -447,9 +470,10 @@ function Draft() {
           {!loadingRec && recommendations.length > 0 && (
             <>
               <p className="table-note">
-                <strong>기본 승률</strong>: 이 챔피언 단독 승률 (다른 픽/밴 고려 안 함) ·{' '}
-                <strong>추정 승률</strong>: 기본 승률에 지금까지 픽한 아군과의 시너지, 상대 챔피언과의 카운터,
-                이 라인에서 실제로 얼마나 자주 픽되는지(라인 적합도) 보정치를 더한 값 ·{' '}
+                <strong>기본 승률</strong>: 이 챔피언 단독 승률 (다른 픽/밴 고려 안 함, 표본 보정 전 원본 값) ·{' '}
+                <strong>추정 승률</strong>: 표본이 적으면 이 라인 평균 쪽으로 당겨서 보정한 기본 승률에
+                지금까지 픽한 아군과의 시너지, 상대 챔피언과의 카운터, 이 라인에서 실제로 얼마나 자주
+                픽되는지(라인 적합도) 보정치를 더한 값 ·{' '}
                 <strong>추정 승률이 높은 순</strong>으로 정렬돼요.
               </p>
               <div className="table-scroll">
@@ -482,6 +506,7 @@ function Draft() {
                             {c.type === 'synergy' && `+${displayName(c.with)}`}
                             {c.type === 'counter' && `vs ${displayName(c.vs)}`}
                             {c.type === 'lane_fit' && `라인 적합도 (${c.lane_share}%)`}
+                            {c.type === 'sample_adjust' && `표본 보정 (${c.games}게임)`}
                             : {c.delta > 0 ? '+' : ''}{c.delta}%p
                           </div>
                         ))}

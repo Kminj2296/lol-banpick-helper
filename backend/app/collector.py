@@ -45,12 +45,22 @@ def collect_puuids(max_summoners: int) -> list[str]:
     return puuids[:max_summoners]
 
 
+def extract_patch(game_version: str) -> str | None:
+    """'14.13.587.1234' 같은 gameVersion에서 'major.minor'만 뽑아 패치 버전으로 쓴다."""
+    parts = game_version.split(".")
+    if len(parts) < 2:
+        return None
+    return f"{parts[0]}.{parts[1]}"
+
+
 def process_match(conn, match_id: str):
     if is_match_processed(conn, match_id):
         return
 
     detail = riot_client.get_match_detail(match_id)
-    participants = detail.get("info", {}).get("participants", [])
+    info = detail.get("info", {})
+    patch = extract_patch(info.get("gameVersion", ""))
+    participants = info.get("participants", [])
 
     for p in participants:
         lane = p.get("teamPosition")
@@ -63,6 +73,7 @@ def process_match(conn, match_id: str):
             lane=lane,
             champion=p["championName"],
             win=p["win"],
+            patch=patch,
         )
 
     mark_match_processed(conn, match_id)

@@ -66,6 +66,16 @@ def get_sources():
     return [{"source": row["source"], "games": row["games"]} for row in rows]
 
 
+@app.get("/api/patches")
+def get_patches(
+    sources: str | None = Query(None, description="쉼표로 구분된 source 목록 (예: soloq,pro:LCK)"),
+):
+    """수집된 패치 버전 목록 (최신순). 패치 정보가 없는 예전 데이터는 포함되지 않는다."""
+    src_list = sources.split(",") if sources else None
+    with get_conn() as conn:
+        return scorer.list_patches(conn, sources=src_list)
+
+
 @app.get("/api/recommend")
 def recommend(
     lane: str = Query(..., description="TOP / JUNGLE / MIDDLE / BOTTOM / UTILITY"),
@@ -110,6 +120,7 @@ def top_champions(
     min_games: int = Query(5, ge=1, description="최소 표본 게임 수"),
     lane: str | None = Query(None, description="TOP / JUNGLE / MIDDLE / BOTTOM / UTILITY (생략 시 전체 라인 통합)"),
     sources: str | None = Query(None, description="쉼표로 구분된 source 목록 (예: soloq,pro:LCK)"),
+    patches: str | None = Query(None, description="쉼표로 구분된 패치 버전 목록 (예: 14.13,14.14)"),
 ):
     """챔피언 승률 순위 (밴 후보 추천용). lane을 지정하면 해당 라인만 집계."""
     if lane:
@@ -118,15 +129,27 @@ def top_champions(
             raise HTTPException(status_code=400, detail=f"lane은 {LANES} 중 하나여야 합니다")
 
     src_list = sources.split(",") if sources else None
+    patch_list = patches.split(",") if patches else None
     with get_conn() as conn:
-        base = scorer.base_winrates(conn, lane=lane, sources=src_list)
+        base = scorer.base_winrates(conn, lane=lane, sources=src_list, patches=patch_list)
+
+    total_games = sum(g for g, _ in base.values())
+    total_wins = sum(w for _, w in base.values())
+    prior = (total_wins / total_games) if total_games else 0.5
 
     rows = [
-        {"champion": champ, "games": games, "win_rate": round(wins / games * 100, 1)}
+        {
+            "champion": champ,
+            "games": games,
+            "win_rate": round(wins / games * 100, 1),
+            "_rank_score": scorer.shrink_win_rate(wins, games, prior, k=30),
+        }
         for champ, (games, wins) in base.items()
         if games >= min_games
     ]
-    rows.sort(key=lambda r: r["win_rate"], reverse=True)
+    rows.sort(key=lambda r: r["_rank_score"], reverse=True)
+    for r in rows:
+        del r["_rank_score"]
     return rows
 
 
@@ -142,11 +165,12 @@ def draft_recommend(payload: dict = Body(...)):
     banned = payload.get("banned", [])
     min_games = int(payload.get("min_games", 5))
     sources = payload.get("sources") or None
+    patches = payload.get("patches") or None
 
     with get_conn() as conn:
         results = scorer.recommend_pick(
             conn, lane, allies, enemies, banned,
-            min_games=min_games, sources=sources,
+            min_games=min_games, sources=sources, patches=patches,
         )
 
     return results[:20]

@@ -5,7 +5,7 @@ from contextlib import contextmanager
 
 from .config import DB_PATH, DB_SEED_PATH
 
-SCHEMA = """
+TABLES = """
 CREATE TABLE IF NOT EXISTS game_participants (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     game_id TEXT NOT NULL,
@@ -14,17 +14,21 @@ CREATE TABLE IF NOT EXISTS game_participants (
     lane TEXT NOT NULL,
     champion TEXT NOT NULL,
     win INTEGER NOT NULL,
+    patch TEXT,
     UNIQUE(game_id, team_key, champion)
 );
 
 CREATE TABLE IF NOT EXISTS processed_matches (
     match_id TEXT PRIMARY KEY
 );
+"""
 
+INDEXES = """
 CREATE INDEX IF NOT EXISTS idx_gp_champion ON game_participants (champion);
 CREATE INDEX IF NOT EXISTS idx_gp_team_key ON game_participants (team_key);
 CREATE INDEX IF NOT EXISTS idx_gp_game_id ON game_participants (game_id);
 CREATE INDEX IF NOT EXISTS idx_gp_lane_champion ON game_participants (lane, champion);
+CREATE INDEX IF NOT EXISTS idx_gp_patch ON game_participants (patch);
 """
 
 
@@ -45,7 +49,16 @@ def init_db():
     if not os.path.exists(DB_PATH) and os.path.exists(DB_SEED_PATH):
         shutil.copyfile(DB_SEED_PATH, DB_PATH)
     with get_conn() as conn:
-        conn.executescript(SCHEMA)
+        conn.executescript(TABLES)
+        _migrate(conn)
+        conn.executescript(INDEXES)
+
+
+def _migrate(conn):
+    """이미 만들어진 DB에 새로 추가된 컬럼을 뒤늦게 채워 넣는다 (기존 데이터는 유지)."""
+    cols = [row["name"] for row in conn.execute("PRAGMA table_info(game_participants)").fetchall()]
+    if "patch" not in cols:
+        conn.execute("ALTER TABLE game_participants ADD COLUMN patch TEXT")
 
 
 def is_match_processed(conn, match_id: str) -> bool:
@@ -57,11 +70,13 @@ def mark_match_processed(conn, match_id: str):
     conn.execute("INSERT OR IGNORE INTO processed_matches (match_id) VALUES (?)", (match_id,))
 
 
-def insert_participant(conn, game_id: str, source: str, team_key: str, lane: str, champion: str, win: bool):
+def insert_participant(
+    conn, game_id: str, source: str, team_key: str, lane: str, champion: str, win: bool, patch: str | None = None
+):
     conn.execute(
         """
-        INSERT OR IGNORE INTO game_participants (game_id, source, team_key, lane, champion, win)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT OR IGNORE INTO game_participants (game_id, source, team_key, lane, champion, win, patch)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (game_id, source, team_key, lane, champion, int(win)),
+        (game_id, source, team_key, lane, champion, int(win), patch),
     )
