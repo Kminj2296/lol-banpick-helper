@@ -110,7 +110,7 @@ function Draft() {
 
   useEffect(() => {
     const patchQuery = selectedPatch ? `&patches=${selectedPatch}` : ''
-    fetch(`/api/top-champions?min_games=5&lane=${banLane}${patchQuery}`)
+    fetch(`/api/top-champions?min_games=20&lane=${banLane}${patchQuery}`)
       .then((r) => r.json())
       .then(setTopChampions)
       .catch(() => {})
@@ -199,7 +199,7 @@ function Draft() {
         allies: currentTeamPicks.map((p) => p.champion),
         enemies: enemyTeamPicks.map((p) => p.champion),
         banned: excludedChampions,
-        min_games: 3,
+        min_games: 20,
         patches: selectedPatch ? [selectedPatch] : null,
       }),
     })

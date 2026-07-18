@@ -172,7 +172,7 @@ def recommend_pick(
     enemies: list[str],
     banned: list[str],
     min_games: int = 5,
-    min_pair_games: int = 2,
+    min_pair_games: int = 5,
     sources: list[str] | None = None,
     patches: list[str] | None = None,
     shrinkage_k: int = 10,
