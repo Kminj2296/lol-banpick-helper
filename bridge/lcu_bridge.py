@@ -123,25 +123,44 @@ def main():
         auth = ("riot", password)
 
         print("롤 클라이언트 연결됨. 챔피언 선택 화면을 기다리는 중...")
+        in_champ_select = False
+        error_streak = 0
         while True:
             try:
                 resp = requests.get(
                     f"{base_url}/lol-champ-select/v1/session", auth=auth, verify=False, timeout=5
                 )
-            except requests.RequestException:
+            except requests.RequestException as e:
+                print(f"롤 클라이언트 연결이 끊겼습니다 ({e}). 다시 탐색합니다...")
                 break  # 클라이언트가 꺼졌을 수 있음 -> lockfile 다시 탐색
 
             if resp.status_code == 404:
                 if last_sent is not None:
                     print("챔피언 선택 종료. 대기 상태로 전환합니다.")
                     last_sent = None
+                in_champ_select = False
+                error_streak = 0
                 time.sleep(POLL_INTERVAL)
                 continue
             if resp.status_code != 200:
+                error_streak += 1
+                if error_streak in (1, 10) or error_streak % 60 == 0:
+                    print(f"챔피언 선택 세션 조회 실패: HTTP {resp.status_code} - {resp.text[:200]}")
+                time.sleep(POLL_INTERVAL)
+                continue
+            error_streak = 0
+
+            if not in_champ_select:
+                print("챔피언 선택 화면 진입 감지. 밴/픽을 추적합니다...")
+                in_champ_select = True
+
+            try:
+                actions = build_actions(resp.json(), champ_id_map)
+            except Exception as e:
+                print(f"세션 데이터 해석 실패: {e}")
                 time.sleep(POLL_INTERVAL)
                 continue
 
-            actions = build_actions(resp.json(), champ_id_map)
             if actions != last_sent:
                 try:
                     requests.post(
