@@ -98,7 +98,7 @@ h1 {
 
 .result-table th:nth-child(2),
 .result-table td:nth-child(2) {
-  width: 11rem;
+  width: 13rem;
 }
 
 .result-table th:nth-child(3),
@@ -329,6 +329,13 @@ button.pick-champ.cancelable:hover {
   display: flex;
   align-items: center;
   gap: 0.4rem;
+}
+
+.champion-cell .champion-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .ban-suggestions {

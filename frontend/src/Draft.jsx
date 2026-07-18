@@ -471,7 +471,7 @@ function Draft() {
                       <td>{i + 1}</td>
                       <td className="champion-cell">
                         <ChampionThumb src={imageUrl(r.champion)} alt={displayName(r.champion)} size={28} />
-                        {displayName(r.champion)}
+                        <span className="champion-name" title={displayName(r.champion)}>{displayName(r.champion)}</span>
                       </td>
                       <td>{r.base_win_rate}%</td>
                       <td><strong>{r.estimated_win_rate}%</strong></td>
