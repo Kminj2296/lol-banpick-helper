@@ -76,7 +76,7 @@ h1 {
 
 .result-table {
   width: 100%;
-  min-width: 40rem;
+  min-width: 54rem;
   border-collapse: collapse;
   table-layout: fixed;
 }
@@ -113,6 +113,11 @@ h1 {
 .result-table td:nth-child(5) {
   width: 4rem;
   text-align: right;
+}
+
+.result-table th:nth-child(6),
+.result-table td:nth-child(6) {
+  width: 14rem;
 }
 
 .result-table th:nth-child(7),
