@@ -139,7 +139,22 @@ function Draft() {
     [actions],
   )
 
-  const currentStep = stepIndex < draftSequence.length ? draftSequence[stepIndex] : null
+  // 실시간 연동에서는 브리지가 "내 팀=blue"로 고정 태깅하는데, 실제 게임에서
+  // 내 팀이 항상 먼저 행동하는(SOLOQ_SEQUENCE가 가정하는) 쪽이라는 보장은 없다.
+  // 첫 실제 액션의 팀과 시퀀스가 가정한 팀이 다르면, 이후 모든 단계에서 라벨을 뒤집어
+  // 아군/적군이 뒤바뀌어 추천되는 것을 막는다.
+  const teamSwapped = useMemo(() => {
+    if (actions.length === 0 || !draftSequence[0]) return false
+    return actions[0].team !== draftSequence[0].team
+  }, [actions, draftSequence])
+
+  const currentStep = useMemo(() => {
+    if (stepIndex >= draftSequence.length) return null
+    const step = draftSequence[stepIndex]
+    if (!teamSwapped) return step
+    return { ...step, team: step.team === 'blue' ? 'red' : 'blue' }
+  }, [stepIndex, draftSequence, teamSwapped])
+
   const currentTeamPicks = currentStep?.team === 'blue' ? blue : red
   const enemyTeamPicks = currentStep?.team === 'blue' ? red : blue
 
@@ -302,7 +317,10 @@ function Draft() {
             checked={liveEnabled}
             onChange={(e) => {
               setLiveEnabled(e.target.checked)
-              if (e.target.checked) handleReset()
+              if (e.target.checked) {
+                setMode('soloq') // 실시간 연동은 실제 솔로랭크 밴픽 순서만 지원
+                handleReset()
+              }
             }}
           />
           {' '}실시간 연동 (PC에서 로컬 브리지 실행 중이어야 해요)
