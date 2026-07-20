@@ -472,10 +472,12 @@ function Draft() {
               <p className="table-note">
                 <strong>기본 승률</strong>: 이 챔피언 단독 승률 (다른 픽/밴 고려 안 함, 표본 보정 전 원본 값) ·{' '}
                 <strong>추정 승률</strong>: 표본이 적으면 이 라인 평균 쪽으로 당겨서 보정한 기본 승률에
-                지금까지 픽한 아군과의 시너지, 상대 챔피언과의 카운터, 라인 적합도, 밴 회피 보정치를
-                더한 값 ·{' '}
+                지금까지 픽한 아군과의 시너지, 상대 챔피언과의 카운터, 라인 적합도, 밴 회피, 팀 정렬
+                (데미지 다양성·CC 보완·타이밍 정렬) 보정치를 더한 값 ·{' '}
                 <strong>추정 승률이 높은 순</strong>으로 정렬돼요. 시너지/카운터는 아군·상대 픽이
-                많이 드러날수록(후픽일수록), 밴 회피는 반대로 드래프트 초반(선픽)일수록 더 크게 반영돼요.
+                많이 드러날수록(후픽일수록), 밴 회피는 반대로 드래프트 초반(선픽)일수록 더 크게
+                반영되고, 팀 정렬 보정은 실제 딜/CC/게임 길이별 승률 데이터로만 계산해요
+                (챔피언 역할군 같은 주관적 태그는 안 씀).
               </p>
               <div className="table-scroll">
               <table className="result-table">
@@ -509,6 +511,9 @@ function Draft() {
                             {c.type === 'lane_fit' && `라인 적합도 (${c.lane_share}%)`}
                             {c.type === 'sample_adjust' && `표본 보정 (${c.games}게임)`}
                             {c.type === 'ban_safety' && `밴 회피 (밴률 ${c.ban_rate}%)`}
+                            {c.type === 'damage_diversity' && '데미지 다양성'}
+                            {c.type === 'cc_coverage' && 'CC 보완'}
+                            {c.type === 'curve_alignment' && '타이밍 정렬'}
                             : {c.delta > 0 ? '+' : ''}{c.delta}%p
                           </div>
                         ))}

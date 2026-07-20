@@ -73,6 +73,7 @@ def process_match(conn, match_id: str, champ_id_map: dict[int, str]):
     detail = riot_client.get_match_detail(match_id)
     info = detail.get("info", {})
     patch = extract_patch(info.get("gameVersion", ""))
+    game_duration_sec = info.get("gameDuration")
     participants = info.get("participants", [])
 
     for p in participants:
@@ -87,6 +88,11 @@ def process_match(conn, match_id: str, champ_id_map: dict[int, str]):
             champion=p["championName"],
             win=p["win"],
             patch=patch,
+            physical_damage=p.get("physicalDamageDealtToChampions"),
+            magic_damage=p.get("magicDamageDealtToChampions"),
+            true_damage=p.get("trueDamageDealtToChampions"),
+            time_ccing_others=p.get("timeCCingOthers"),
+            game_duration_sec=game_duration_sec,
         )
 
     for team in info.get("teams", []):

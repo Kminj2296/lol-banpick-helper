@@ -193,6 +193,106 @@ def ban_rates(
     return {row["champion"]: row["bans"] / total_games for row in rows}
 
 
+def damage_profiles(
+    conn, sources: list[str] | None = None, patches: list[str] | None = None, min_games: int = 5
+) -> dict[str, dict]:
+    """챔피언별 실제 딜량의 물리/마법/고정 데미지 비율. 태그가 아니라 실측 데이터라서
+    "이 챔피언은 AD다"라는 판단 없이 그대로 집계만 한다. {champion: {physical_pct, magic_pct, true_pct, games}}"""
+    src_sql, src_params = _source_filter_sql(sources, alias="gp")
+    patch_sql, patch_params = _patch_filter_sql(patches, alias="gp")
+    rows = conn.execute(
+        f"""
+        SELECT champion, COUNT(*) AS games,
+               SUM(physical_damage) AS physical, SUM(magic_damage) AS magic, SUM(true_damage) AS true_dmg
+        FROM game_participants gp
+        WHERE physical_damage IS NOT NULL{src_sql}{patch_sql}
+        GROUP BY champion
+        """,
+        [*src_params, *patch_params],
+    ).fetchall()
+
+    result = {}
+    for row in rows:
+        if row["games"] < min_games:
+            continue
+        total = (row["physical"] or 0) + (row["magic"] or 0) + (row["true_dmg"] or 0)
+        if total <= 0:
+            continue
+        result[row["champion"]] = {
+            "physical_pct": row["physical"] / total,
+            "magic_pct": row["magic"] / total,
+            "true_pct": row["true_dmg"] / total,
+            "games": row["games"],
+        }
+    return result
+
+
+def cc_contribution(
+    conn, sources: list[str] | None = None, patches: list[str] | None = None, min_games: int = 5
+) -> dict[str, float]:
+    """챔피언별 분당 CC 기여도(상대를 얼마나 오래 CC 걸었는지, 실측치). {champion: 초/분}"""
+    src_sql, src_params = _source_filter_sql(sources, alias="gp")
+    patch_sql, patch_params = _patch_filter_sql(patches, alias="gp")
+    rows = conn.execute(
+        f"""
+        SELECT champion, COUNT(*) AS games,
+               SUM(time_ccing_others) AS total_cc, SUM(game_duration_sec) AS total_duration
+        FROM game_participants gp
+        WHERE time_ccing_others IS NOT NULL AND game_duration_sec > 0{src_sql}{patch_sql}
+        GROUP BY champion
+        """,
+        [*src_params, *patch_params],
+    ).fetchall()
+
+    result = {}
+    for row in rows:
+        if row["games"] < min_games or not row["total_duration"]:
+            continue
+        result[row["champion"]] = (row["total_cc"] or 0) / (row["total_duration"] / 60)
+    return result
+
+
+def power_curve(
+    conn, sources: list[str] | None = None, patches: list[str] | None = None, min_bucket_games: int = 10
+) -> dict[str, dict]:
+    """챔피언별 게임 길이 구간(초반<20분/중반/후반>=30분)별 승률로 본 파워 커브 (실측치).
+    skew = 초반 승률 - 후반 승률 (양수면 초반이 강한 챔피언). {champion: {early_wr, mid_wr, late_wr, skew, ...}}"""
+    src_sql, src_params = _source_filter_sql(sources, alias="gp")
+    patch_sql, patch_params = _patch_filter_sql(patches, alias="gp")
+    rows = conn.execute(
+        f"""
+        SELECT champion,
+               SUM(CASE WHEN game_duration_sec < 1200 THEN 1 ELSE 0 END) AS early_games,
+               SUM(CASE WHEN game_duration_sec < 1200 THEN win ELSE 0 END) AS early_wins,
+               SUM(CASE WHEN game_duration_sec >= 1200 AND game_duration_sec < 1800 THEN 1 ELSE 0 END) AS mid_games,
+               SUM(CASE WHEN game_duration_sec >= 1200 AND game_duration_sec < 1800 THEN win ELSE 0 END) AS mid_wins,
+               SUM(CASE WHEN game_duration_sec >= 1800 THEN 1 ELSE 0 END) AS late_games,
+               SUM(CASE WHEN game_duration_sec >= 1800 THEN win ELSE 0 END) AS late_wins
+        FROM game_participants gp
+        WHERE game_duration_sec IS NOT NULL{src_sql}{patch_sql}
+        GROUP BY champion
+        """,
+        [*src_params, *patch_params],
+    ).fetchall()
+
+    result = {}
+    for row in rows:
+        if row["early_games"] < min_bucket_games or row["late_games"] < min_bucket_games:
+            continue
+        early_wr = row["early_wins"] / row["early_games"]
+        late_wr = row["late_wins"] / row["late_games"]
+        mid_wr = row["mid_wins"] / row["mid_games"] if row["mid_games"] >= min_bucket_games else None
+        result[row["champion"]] = {
+            "early_wr": early_wr,
+            "mid_wr": mid_wr,
+            "late_wr": late_wr,
+            "skew": early_wr - late_wr,
+            "early_games": row["early_games"],
+            "late_games": row["late_games"],
+        }
+    return result
+
+
 def _progress_weight(known_count: int, ramp: int = 4) -> float:
     """드래프트에서 정보가 쌓일수록(known_count) 그 정보에 대한 신뢰도를 0.5~1.0으로
     올려주는 가중치. 시너지는 지금까지 나온 아군 수, 카운터는 상대 수에 따라 커진다
@@ -216,6 +316,9 @@ def recommend_pick(
     lane_fit_confidence_games: int = 8,
     ban_safety_weight: float = 6.0,
     draft_progress_ramp: int = 8,
+    damage_diversity_weight: float = 3.0,
+    cc_coverage_weight: float = 3.0,
+    curve_alignment_weight: float = 3.0,
 ) -> list[dict]:
     """
     shrinkage_k: 표본이 적은 시너지/카운터 보정치를 얼마나 축소할지 결정하는 값.
@@ -241,6 +344,17 @@ def recommend_pick(
       때)일수록 크게 반영하고, 픽이 진행될수록 0으로 줄어든다. 이미 밴 페이즈가
       끝났거나 후픽 단계라 밴당할 위험이 의미 없어졌기 때문이다. 후보 풀 평균
       밴률보다 이 챔피언 밴률이 낮으면 가산점을, 높으면 감점을 준다.
+
+    아군 픽이 드러날수록 반영되는 팀 정렬 보정 (전부 실측 데이터 기반, 챔피언
+    아키타입 같은 주관적 태그는 안 씀 — 아군이 1명도 없으면 비교 대상이 없어서 계산 안 함):
+    - damage_diversity_weight: 아군의 물리/마법 데미지 비율이 한쪽으로 쏠려 있으면
+      (예: 이미 픽한 챔피언들이 전부 물리 딜러) 반대 성향(마법 딜러) 챔피언에 가산점을
+      줘서 상대가 방어 아이템 하나로 팀 전체를 카운터하기 어렵게 만든다.
+    - cc_coverage_weight: 아군의 분당 CC 기여도가 낮으면(=아직 CC가 부족한 조합) CC를
+      많이 주는 챔피언에 가산점을 준다. 이미 CC가 충분하면 추가 보너스는 없다.
+    - curve_alignment_weight: 아군의 초반/후반 승률 격차(skew)와 이 챔피언의 skew가
+      같은 방향이면(둘 다 초반형이거나 둘 다 후반형) 가산점을 준다. 팀 전체가 같은
+      타이밍에 강해야 한다는 걸 승률 데이터로 확인한 것.
     """
     base = base_winrates(conn, lane=lane, sources=sources, patches=patches)
     excluded = set(allies) | set(enemies) | set(banned)
@@ -262,6 +376,32 @@ def recommend_pick(
     early_weight = max(0.0, 1.0 - known_picks / draft_progress_ramp)
     candidate_ban_rates = [ban_rate_data.get(c, 0.0) for c in candidates]
     avg_ban_rate = sum(candidate_ban_rates) / len(candidate_ban_rates) if candidate_ban_rates else 0.0
+
+    # 아군 팀 정렬 보정용 실측 데이터 (아군이 있을 때만 계산할 가치가 있음)
+    team_damage_skew = team_cc_per_min = team_curve_skew = None
+    if allies:
+        dmg_data = damage_profiles(conn, sources, patches)
+        cc_data = cc_contribution(conn, sources, patches)
+        curve_data = power_curve(conn, sources, patches)
+
+        ally_dmg = [dmg_data[a] for a in allies if a in dmg_data]
+        if ally_dmg:
+            team_damage_skew = (
+                sum(d["physical_pct"] - d["magic_pct"] for d in ally_dmg) / len(ally_dmg)
+            )
+
+        ally_cc = [cc_data[a] for a in allies if a in cc_data]
+        if ally_cc:
+            team_cc_per_min = sum(ally_cc) / len(ally_cc)
+        cc_pool = list(cc_data.values())
+        pool_avg_cc = sum(cc_pool) / len(cc_pool) if cc_pool else None
+
+        ally_curve = [curve_data[a]["skew"] for a in allies if a in curve_data]
+        if ally_curve:
+            team_curve_skew = sum(ally_curve) / len(ally_curve)
+    else:
+        dmg_data = cc_data = curve_data = {}
+        pool_avg_cc = None
 
     results = []
     for champ, (b_games, b_wins) in candidates.items():
@@ -330,6 +470,39 @@ def recommend_pick(
                     "ban_rate": round(this_ban_rate * 100, 1),
                     "delta": round(ban_safety_pp, 1),
                     "applied_delta": early_weight * ban_safety_weight * (avg_ban_rate - this_ban_rate),
+                })
+
+        if team_damage_skew is not None and champ in dmg_data:
+            cand_skew = dmg_data[champ]["physical_pct"] - dmg_data[champ]["magic_pct"]
+            diversity_raw = max(-1.0, min(1.0, -(team_damage_skew * cand_skew) * 4))
+            diversity_pp = damage_diversity_weight * diversity_raw
+            if abs(diversity_pp) >= 0.1:
+                components.append({
+                    "type": "damage_diversity",
+                    "delta": round(diversity_pp, 1),
+                    "applied_delta": diversity_pp / 100,
+                })
+
+        if team_cc_per_min is not None and pool_avg_cc and champ in cc_data:
+            need = max(0.0, 1.0 - team_cc_per_min / pool_avg_cc)
+            cand_relative = (cc_data[champ] - pool_avg_cc) / pool_avg_cc
+            cc_pp = cc_coverage_weight * need * cand_relative
+            if abs(cc_pp) >= 0.1:
+                components.append({
+                    "type": "cc_coverage",
+                    "delta": round(cc_pp, 1),
+                    "applied_delta": cc_pp / 100,
+                })
+
+        if team_curve_skew is not None and champ in curve_data:
+            cand_skew = curve_data[champ]["skew"]
+            curve_raw = max(-1.0, min(1.0, (team_curve_skew * cand_skew) * 8))
+            curve_pp = curve_alignment_weight * curve_raw
+            if abs(curve_pp) >= 0.1:
+                components.append({
+                    "type": "curve_alignment",
+                    "delta": round(curve_pp, 1),
+                    "applied_delta": curve_pp / 100,
                 })
 
         total_delta = sum(comp.pop("applied_delta") for comp in components)

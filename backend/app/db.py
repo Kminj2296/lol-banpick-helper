@@ -15,6 +15,11 @@ CREATE TABLE IF NOT EXISTS game_participants (
     champion TEXT NOT NULL,
     win INTEGER NOT NULL,
     patch TEXT,
+    physical_damage INTEGER,
+    magic_damage INTEGER,
+    true_damage INTEGER,
+    time_ccing_others INTEGER,
+    game_duration_sec INTEGER,
     UNIQUE(game_id, team_key, champion)
 );
 
@@ -70,6 +75,9 @@ def _migrate(conn):
     cols = [row["name"] for row in conn.execute("PRAGMA table_info(game_participants)").fetchall()]
     if "patch" not in cols:
         conn.execute("ALTER TABLE game_participants ADD COLUMN patch TEXT")
+    for col in ("physical_damage", "magic_damage", "true_damage", "time_ccing_others", "game_duration_sec"):
+        if col not in cols:
+            conn.execute(f"ALTER TABLE game_participants ADD COLUMN {col} INTEGER")
 
 
 def is_match_processed(conn, match_id: str) -> bool:
@@ -82,14 +90,19 @@ def mark_match_processed(conn, match_id: str):
 
 
 def insert_participant(
-    conn, game_id: str, source: str, team_key: str, lane: str, champion: str, win: bool, patch: str | None = None
+    conn, game_id: str, source: str, team_key: str, lane: str, champion: str, win: bool, patch: str | None = None,
+    physical_damage: int | None = None, magic_damage: int | None = None, true_damage: int | None = None,
+    time_ccing_others: int | None = None, game_duration_sec: int | None = None,
 ):
     conn.execute(
         """
-        INSERT OR IGNORE INTO game_participants (game_id, source, team_key, lane, champion, win, patch)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT OR IGNORE INTO game_participants
+            (game_id, source, team_key, lane, champion, win, patch,
+             physical_damage, magic_damage, true_damage, time_ccing_others, game_duration_sec)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (game_id, source, team_key, lane, champion, int(win), patch),
+        (game_id, source, team_key, lane, champion, int(win), patch,
+         physical_damage, magic_damage, true_damage, time_ccing_others, game_duration_sec),
     )
 
 
