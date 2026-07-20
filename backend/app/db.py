@@ -21,6 +21,15 @@ CREATE TABLE IF NOT EXISTS game_participants (
 CREATE TABLE IF NOT EXISTS processed_matches (
     match_id TEXT PRIMARY KEY
 );
+
+CREATE TABLE IF NOT EXISTS champion_bans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    game_id TEXT NOT NULL,
+    source TEXT NOT NULL,
+    champion TEXT NOT NULL,
+    patch TEXT,
+    UNIQUE(game_id, champion)
+);
 """
 
 INDEXES = """
@@ -29,6 +38,8 @@ CREATE INDEX IF NOT EXISTS idx_gp_team_key ON game_participants (team_key);
 CREATE INDEX IF NOT EXISTS idx_gp_game_id ON game_participants (game_id);
 CREATE INDEX IF NOT EXISTS idx_gp_lane_champion ON game_participants (lane, champion);
 CREATE INDEX IF NOT EXISTS idx_gp_patch ON game_participants (patch);
+CREATE INDEX IF NOT EXISTS idx_bans_champion ON champion_bans (champion);
+CREATE INDEX IF NOT EXISTS idx_bans_source ON champion_bans (source);
 """
 
 
@@ -79,4 +90,14 @@ def insert_participant(
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
         (game_id, source, team_key, lane, champion, int(win), patch),
+    )
+
+
+def insert_ban(conn, game_id: str, source: str, champion: str, patch: str | None = None):
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO champion_bans (game_id, source, champion, patch)
+        VALUES (?, ?, ?, ?)
+        """,
+        (game_id, source, champion, patch),
     )

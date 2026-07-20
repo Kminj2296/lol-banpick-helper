@@ -9,11 +9,24 @@
 
 import argparse
 
+import httpx
+
 from . import riot_client
 from .config import LANES
-from .db import get_conn, init_db, insert_participant, is_match_processed, mark_match_processed
+from .db import get_conn, init_db, insert_ban, insert_participant, is_match_processed, mark_match_processed
 
 SOURCE = "soloq"
+
+
+def fetch_champion_id_map() -> dict[int, str]:
+    """Data Dragon에서 champion.json을 받아 numeric id -> 영문 key 매핑을 만든다.
+    밴 데이터(info.teams[].bans)는 championId만 주고 championName은 안 줘서 필요하다."""
+    versions = httpx.get("https://ddragon.leagueoflegends.com/api/versions.json", timeout=10).json()
+    latest = versions[0]
+    data = httpx.get(
+        f"https://ddragon.leagueoflegends.com/cdn/{latest}/data/en_US/champion.json", timeout=10
+    ).json()
+    return {int(v["key"]): v["id"] for v in data["data"].values()}
 
 
 def collect_puuids(max_summoners: int) -> list[str]:
@@ -53,7 +66,7 @@ def extract_patch(game_version: str) -> str | None:
     return f"{parts[0]}.{parts[1]}"
 
 
-def process_match(conn, match_id: str):
+def process_match(conn, match_id: str, champ_id_map: dict[int, str]):
     if is_match_processed(conn, match_id):
         return
 
@@ -76,6 +89,15 @@ def process_match(conn, match_id: str):
             patch=patch,
         )
 
+    for team in info.get("teams", []):
+        for ban in team.get("bans", []):
+            champion_id = ban.get("championId", -1)
+            if champion_id <= 0:
+                continue
+            champion = champ_id_map.get(champion_id)
+            if champion:
+                insert_ban(conn, match_id, SOURCE, champion, patch=patch)
+
     mark_match_processed(conn, match_id)
 
 
@@ -86,6 +108,9 @@ def main():
     args = parser.parse_args()
 
     init_db()
+
+    print("챔피언 id 매핑 불러오는 중...")
+    champ_id_map = fetch_champion_id_map()
 
     puuids = collect_puuids(args.max_summoners)
     print(f"수집 대상 소환사 수: {len(puuids)}")
@@ -100,7 +125,7 @@ def main():
     with get_conn() as conn:
         for i, match_id in enumerate(match_ids, 1):
             try:
-                process_match(conn, match_id)
+                process_match(conn, match_id, champ_id_map)
             except Exception as e:
                 print(f"매치 {match_id} 처리 실패: {e}")
             if i % 10 == 0:

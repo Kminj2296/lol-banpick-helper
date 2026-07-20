@@ -165,6 +165,41 @@ def lane_shares(
     }
 
 
+def ban_rates(
+    conn, sources: list[str] | None = None, patches: list[str] | None = None
+) -> dict[str, float]:
+    """챔피언별 밴률 (전체 게임 대비 몇 %가 이 챔피언을 밴했는지). {champion: 0~1}"""
+    src_sql, src_params = _source_filter_sql(sources, alias="gp")
+    patch_sql, patch_params = _patch_filter_sql(patches, alias="gp")
+    total_row = conn.execute(
+        f"SELECT COUNT(DISTINCT game_id) AS n FROM game_participants gp WHERE 1=1{src_sql}{patch_sql}",
+        [*src_params, *patch_params],
+    ).fetchone()
+    total_games = total_row["n"] if total_row else 0
+    if not total_games:
+        return {}
+
+    ban_src_sql, ban_src_params = _source_filter_sql(sources, alias="cb")
+    ban_patch_sql, ban_patch_params = _patch_filter_sql(patches, alias="cb")
+    rows = conn.execute(
+        f"""
+        SELECT champion, COUNT(DISTINCT game_id) AS bans
+        FROM champion_bans cb
+        WHERE 1=1{ban_src_sql}{ban_patch_sql}
+        GROUP BY champion
+        """,
+        [*ban_src_params, *ban_patch_params],
+    ).fetchall()
+    return {row["champion"]: row["bans"] / total_games for row in rows}
+
+
+def _progress_weight(known_count: int, ramp: int = 4) -> float:
+    """드래프트에서 정보가 쌓일수록(known_count) 그 정보에 대한 신뢰도를 0.5~1.0으로
+    올려주는 가중치. 시너지는 지금까지 나온 아군 수, 카운터는 상대 수에 따라 커진다
+    (선픽처럼 아는 게 적을 때는 한두 게임 표본만으로 결론 내리지 않도록)."""
+    return 0.5 + 0.5 * min(1.0, known_count / ramp)
+
+
 def recommend_pick(
     conn,
     lane: str,
@@ -179,6 +214,8 @@ def recommend_pick(
     base_shrinkage_k: int = 30,
     lane_fit_weight: float = 12.0,
     lane_fit_confidence_games: int = 8,
+    ban_safety_weight: float = 6.0,
+    draft_progress_ramp: int = 8,
 ) -> list[dict]:
     """
     shrinkage_k: 표본이 적은 시너지/카운터 보정치를 얼마나 축소할지 결정하는 값.
@@ -194,6 +231,16 @@ def recommend_pick(
     곱해서 더하는 최대 가산점(%p). 예를 들어 어떤 챔피언이 전체 게임의 100%를
     이 라인에서 뛰었으면 +lane_fit_weight%p, 10%만 이 라인이었으면 소폭만 더한다.
     lane_fit_confidence_games보다 총 표본이 적으면 그 비율만큼 가산점을 축소한다.
+
+    픽 순서에 따른 전략 차이 (선픽 vs 후픽):
+    - 시너지 보정치는 지금까지 나온 아군 수, 카운터 보정치는 상대 수가 늘어날수록
+      (_progress_weight) 신뢰도를 높여서 더 크게 반영한다. 아군/상대 픽이 1~2개뿐인
+      선픽 단계에서는 그 소수 표본만으로 과하게 결론 내리지 않도록 절반 가중치로
+      시작해서, 픽이 쌓일수록(후픽) 최대 가중치까지 커진다.
+    - ban_safety_weight: 반대로 밴 회피 보너스는 드래프트 초반(아군+상대 픽이 적을
+      때)일수록 크게 반영하고, 픽이 진행될수록 0으로 줄어든다. 이미 밴 페이즈가
+      끝났거나 후픽 단계라 밴당할 위험이 의미 없어졌기 때문이다. 후보 풀 평균
+      밴률보다 이 챔피언 밴률이 낮으면 가산점을, 높으면 감점을 준다.
     """
     base = base_winrates(conn, lane=lane, sources=sources, patches=patches)
     excluded = set(allies) | set(enemies) | set(banned)
@@ -206,6 +253,15 @@ def recommend_pick(
     synergy_maps = [(ally, synergy_pairs(conn, ally, sources, patches)) for ally in allies]
     counter_maps = [(enemy, counter_pairs(conn, enemy, sources, patches)) for enemy in enemies]
     lane_share_data = lane_shares(conn, sources, patches)
+    ban_rate_data = ban_rates(conn, sources, patches)
+
+    synergy_weight = _progress_weight(len(allies), draft_progress_ramp)
+    counter_weight = _progress_weight(len(enemies), draft_progress_ramp)
+
+    known_picks = len(allies) + len(enemies)
+    early_weight = max(0.0, 1.0 - known_picks / draft_progress_ramp)
+    candidate_ban_rates = [ban_rate_data.get(c, 0.0) for c in candidates]
+    avg_ban_rate = sum(candidate_ban_rates) / len(candidate_ban_rates) if candidate_ban_rates else 0.0
 
     results = []
     for champ, (b_games, b_wins) in candidates.items():
@@ -227,13 +283,13 @@ def recommend_pick(
             if champ in smap and smap[champ][0] >= min_pair_games:
                 s_games, s_wins = smap[champ]
                 s_wr = s_wins / s_games
-                weight = s_games / (s_games + shrinkage_k)
+                weight = (s_games / (s_games + shrinkage_k)) * synergy_weight
                 components.append({
                     "type": "synergy",
                     "with": ally,
                     "games": s_games,
                     "win_rate": round(s_wr * 100, 1),
-                    "delta": round((s_wr - b_wr) * 100, 1),
+                    "delta": round((s_wr - b_wr) * 100 * synergy_weight, 1),
                     "applied_delta": (s_wr - b_wr) * weight,
                 })
 
@@ -241,13 +297,13 @@ def recommend_pick(
             if champ in cmap and cmap[champ][0] >= min_pair_games:
                 c_games, c_wins = cmap[champ]
                 c_wr = c_wins / c_games
-                weight = c_games / (c_games + shrinkage_k)
+                weight = (c_games / (c_games + shrinkage_k)) * counter_weight
                 components.append({
                     "type": "counter",
                     "vs": enemy,
                     "games": c_games,
                     "win_rate": round(c_wr * 100, 1),
-                    "delta": round((c_wr - b_wr) * 100, 1),
+                    "delta": round((c_wr - b_wr) * 100 * counter_weight, 1),
                     "applied_delta": (c_wr - b_wr) * weight,
                 })
 
@@ -265,6 +321,17 @@ def recommend_pick(
                     "applied_delta": lane_fit_pp / 100,
                 })
 
+        if early_weight > 0 and champ in ban_rate_data:
+            this_ban_rate = ban_rate_data.get(champ, 0.0)
+            ban_safety_pp = early_weight * ban_safety_weight * (avg_ban_rate - this_ban_rate) * 100
+            if abs(ban_safety_pp) >= 0.1:
+                components.append({
+                    "type": "ban_safety",
+                    "ban_rate": round(this_ban_rate * 100, 1),
+                    "delta": round(ban_safety_pp, 1),
+                    "applied_delta": early_weight * ban_safety_weight * (avg_ban_rate - this_ban_rate),
+                })
+
         total_delta = sum(comp.pop("applied_delta") for comp in components)
         estimated = max(0.0, min(1.0, b_wr + total_delta))
 
@@ -273,6 +340,7 @@ def recommend_pick(
             "base_games": b_games,
             "base_win_rate": round(b_wr * 100, 1),
             "estimated_win_rate": round(estimated * 100, 1),
+            "ban_rate": round(ban_rate_data.get(champ, 0.0) * 100, 1),
             "components": sorted(components, key=lambda c: abs(c["delta"]), reverse=True),
         })
 
