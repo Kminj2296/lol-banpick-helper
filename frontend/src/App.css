@@ -345,6 +345,14 @@ button.pick-champ.cancelable:hover {
   gap: 0.4rem;
 }
 
+.champion-cell.selectable {
+  cursor: pointer;
+}
+
+.champion-cell.selectable:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .champion-cell .champion-name {
   overflow: hidden;
   white-space: nowrap;

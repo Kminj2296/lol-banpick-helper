@@ -496,7 +496,11 @@ function Draft() {
                   {recommendations.map((r, i) => (
                     <tr key={r.champion}>
                       <td>{i + 1}</td>
-                      <td className="champion-cell">
+                      <td
+                        className="champion-cell selectable"
+                        title="클릭해서 이 챔피언 선택"
+                        onClick={() => confirmPick(r.champion)}
+                      >
                         <ChampionThumb src={imageUrl(r.champion)} alt={displayName(r.champion)} size={28} />
                         <span className="champion-name" title={displayName(r.champion)}>{displayName(r.champion)}</span>
                       </td>
