@@ -37,20 +37,51 @@ POSITION_MAP = {
     "utility": "UTILITY",
 }
 
+# assignedPosition이 비어있을 때(상대팀은 이 필드가 안 들어오는 경우가 있음) 쓰는
+# 순서 기반 대체값. LCU가 myTeam/theirTeam 배열을 보통 역할 순서대로 내려주기 때문에
+# 배열 인덱스로 라인을 추정한다.
+FALLBACK_LANE_ORDER = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"]
+
+# 리그 오브 레전드 클라이언트로 흔히 잡히는 프로세스 이름들 (환경에 따라 다를 수 있어서 넉넉히 잡는다)
+LEAGUE_PROCESS_NAME_HINTS = ("leagueclientux", "leagueclient")
+
+# psutil로 프로세스의 cwd를 못 읽는 환경(권한 문제 등)을 대비한 기본 설치 경로 후보
+FALLBACK_LOCKFILE_PATHS = [
+    r"C:\Riot Games\League of Legends\lockfile",
+    os.path.expandvars(r"%LOCALAPPDATA%\Riot Games\League of Legends\lockfile"),
+]
+
 
 def find_lockfile() -> str | None:
-    """실행 중인 LeagueClientUx 프로세스의 작업 폴더에서 lockfile을 찾는다."""
+    """실행 중인 League 클라이언트 프로세스의 작업 폴더에서 lockfile을 찾는다.
+    cwd를 못 읽는 환경(권한 문제)에 대비해 흔한 설치 경로도 같이 확인한다."""
+    matched_processes = 0
+    access_denied = 0
     for proc in psutil.process_iter(["name", "exe", "cwd"]):
         try:
             name = (proc.info.get("name") or "").lower()
-            if "leagueclientux" in name:
+            if any(hint in name for hint in LEAGUE_PROCESS_NAME_HINTS):
+                matched_processes += 1
                 cwd = proc.info.get("cwd")
                 if cwd:
                     candidate = os.path.join(cwd, "lockfile")
                     if os.path.exists(candidate):
                         return candidate
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
+        except psutil.AccessDenied:
+            access_denied += 1
             continue
+        except psutil.NoSuchProcess:
+            continue
+
+    for candidate in FALLBACK_LOCKFILE_PATHS:
+        if os.path.exists(candidate):
+            return candidate
+
+    if matched_processes or access_denied:
+        print(
+            f"(진단) 롤 관련 프로세스 {matched_processes}개 발견, "
+            f"접근 거부 {access_denied}건 — lockfile을 찾지 못했습니다."
+        )
     return None
 
 
@@ -70,9 +101,18 @@ def fetch_champion_id_map() -> dict[int, str]:
     return {int(v["key"]): v["id"] for v in data["data"].values()}
 
 
+def _lane_fallback_by_cell(team: list[dict]) -> dict[int, str]:
+    """assignedPosition이 비어있는 경우를 위한 순서 기반 라인 추정.
+    LCU가 팀 배열을 보통 역할 순서(top/jungle/mid/bot/support)대로 내려주는 걸 이용한다."""
+    return {p["cellId"]: FALLBACK_LANE_ORDER[i] for i, p in enumerate(team) if i < len(FALLBACK_LANE_ORDER)}
+
+
 def build_actions(session: dict, champ_id_map: dict[int, str]) -> list[dict]:
-    my_cells = {p["cellId"]: p for p in session.get("myTeam", [])}
-    their_cells = {p["cellId"]: p for p in session.get("theirTeam", [])}
+    my_team = session.get("myTeam", [])
+    their_team = session.get("theirTeam", [])
+    my_cells = {p["cellId"]: p for p in my_team}
+    their_cells = {p["cellId"]: p for p in their_team}
+    fallback_lanes = {**_lane_fallback_by_cell(my_team), **_lane_fallback_by_cell(their_team)}
 
     flat_actions = [a for group in session.get("actions", []) for a in group]
     flat_actions.sort(key=lambda a: a["id"])
@@ -99,7 +139,9 @@ def build_actions(session: dict, champ_id_map: dict[int, str]) -> list[dict]:
             result.append({"type": "ban", "team": team, "champion": champion})
         else:
             player = my_cells.get(cell_id) or their_cells.get(cell_id) or {}
-            lane = POSITION_MAP.get(player.get("assignedPosition", ""), "TOP")
+            lane = POSITION_MAP.get(player.get("assignedPosition", ""))
+            if not lane:
+                lane = fallback_lanes.get(cell_id, "TOP")
             result.append({"type": "pick", "team": team, "champion": champion, "lane": lane})
 
     return result
